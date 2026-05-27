@@ -1,0 +1,58 @@
+# =============================================================================
+# OpenWrt Homelab Power Orchestrator Configuration (Template)
+# File: /etc/homelab_power.conf
+# =============================================================================
+
+# --- Telegram Bot Credentials ---
+# Telegram Bot API Token obtained from @BotFather
+BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
+
+# Comma-separated list of allowed Telegram user IDs that are authorized to run control commands
+# e.g. "8881234,9994321". Get yours via @userinfobot or @GetMyIDBot
+ALLOWED_USER_IDS="YOUR_TELEGRAM_USER_ID"
+
+# --- Target Host Configuration ---
+# The IP address of the Proxmox VE host
+HOST_IP="192.168.11.10"
+
+# The physical MAC address of the Proxmox VE host (used for Wake-on-LAN)
+HOST_MAC="aa:bb:cc:dd:ee:ff"
+
+# Path to the Dropbear/OpenSSH private key used for passwordless SSH access to Proxmox
+SSH_KEY_PATH="/etc/dropbear/id_dropbear"
+
+# --- Network Wake-on-Demand Ports ---
+# Comma-separated list of HTTP TCP ports on the Proxmox host that should be intercepted 
+# and redirected to the beautiful local waking page (port 8080) when Proxmox is sleeping.
+HTTP_REDIRECT_PORTS="80,8123"
+
+# Comma-separated list of HTTPS TCP ports on the Proxmox host that should be intercepted
+# and redirected to the local waking page over SSL (port 8443) when Proxmox is sleeping.
+# Common: 443, 8006 (Proxmox UI)
+HTTPS_REDIRECT_PORTS="443,8006"
+
+# Comma-separated list of game ports that should run local wake listeners when Proxmox
+# is sleeping. When a client tries to connect, it triggers a wake-on-LAN immediately.
+# Syntax: Add '/udp' suffix for UDP ports. Defaults to TCP if no suffix is specified.
+# Common: 
+# - 25565: Minecraft Java (TCP)
+# - 19132/udp: Minecraft Bedrock (UDP)
+# - 27015/udp,27016/udp: Unturned Steam Server (UDP query and game ports)
+GAME_REDIRECT_PORTS="25565,19132/udp,27015/udp,27016/udp"
+
+
+# --- Orchestration Daemon Tuning ---
+# Interval in seconds to check if the Proxmox host is alive (ping)
+CHECK_INTERVAL="5"
+
+# Number of consecutive ping failures before declaring the host is asleep (S3)
+PING_RETRIES="3"
+
+# --- Multi-Guest Dynamic Orchestration Map ---
+# Comma-separated list of individual VMs/LXCs that should auto-sleep/wake dynamically.
+# Format: "VMID:IP_ADDRESS:PORT/PROTOCOL:IDLE_MINUTES"
+# Must match the settings configured in Proxmox /etc/homelab_power.conf.
+# Example: "101:192.168.11.50:25565/tcp:15,102:192.168.11.60:19132/udp:15"
+# Leave empty if not using individual guest sleep/wake orchestration.
+GUEST_ORCHESTRATION_MAP=""
+

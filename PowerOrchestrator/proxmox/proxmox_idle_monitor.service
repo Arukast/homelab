@@ -1,0 +1,9 @@
+[Unit]
+Description=Proxmox VE Idle Monitor and Power Saver
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/proxmox_idle_monitor.sh
+StandardOutput=syslog
+StandardError=syslog

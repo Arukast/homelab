@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Proxmox VE Idle Monitor Periodically
+Documentation=https://github.com/Arukast/OpenWrt-Config
+
+[Timer]
+# Run 5 minutes after system boots
+OnBootSec=5min
+# Run every 10 minutes thereafter
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

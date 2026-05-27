@@ -1,0 +1,91 @@
+# =============================================================================
+# Proxmox VE Idle Monitor Configuration
+# File: /etc/homelab_power.conf
+# =============================================================================
+
+# --- Idle Detection Thresholds ---
+# CPU 15-minute load average threshold. If the 15-minute load average is below 
+# this value, the CPU is considered idle. (e.g. 0.15 is 15% of a single core)
+CPU_THRESHOLD="0.15"
+
+# --- Network Activity Thresholds ---
+# The network interface or bridge to monitor for active client traffic (usually vmbr0 in Proxmox)
+NET_INTERFACE="vmbr0"
+
+# Network traffic threshold in KB/s (Kilobytes per second). If the average transfer
+# rate (Rx + Tx) over 10 seconds exceeds this value, the host is considered active.
+# A setting of 50 (50 KB/s) allows minor background background updates but keeps 
+# Proxmox awake during active game sessions, web requests, or file transfers.
+NET_THRESHOLD_KBPS="50"
+
+
+# --- Monitored TCP Ports ---
+# Comma-separated list of active service ports. If any established TCP connection 
+# is found on these ports (e.g. active players, stream clients, active web users),
+# the host will NOT be considered idle and will not enter sleep mode.
+# 
+# 💡 How to find active ports: 
+#   SSH into Proxmox and run: 'ss -tunlp' to see all active listening ports,
+#   protocols, and their associated process/container details.
+#
+# Common ports:
+# - 25565: Minecraft
+# - 32400: Plex Media Server
+# - 8006: Proxmox Web UI
+# - 8123: Home Assistant
+# - 22: SSH Management
+MONITORED_PORTS="25565,32400,8006,8123,22"
+
+
+# --- Container (LXC) Power Management ---
+# How to handle running LXC containers when the host is preparing to sleep.
+# Options:
+# - suspend  : Freezes the processes in RAM (Recommended for S3. Very fast resume)
+# - stop     : Performs a clean shutdown of the container
+# - none     : Leaves the container running (Let kernel handle S3 suspend)
+LXC_SUSPEND_METHOD="suspend"
+
+# --- Virtual Machine (QEMU) Power Management ---
+# How to handle running QEMU VMs when the host is preparing to sleep.
+# Options:
+# - suspend  : Suspends VM state to RAM (Fast resume, requires QEMU agent)
+#              NOTE: For VMs with PCIe passthrough (like an RX580 GPU), "suspend"
+#              will fail because GPU state cannot be snapshotted. The script 
+#              automatically falls back to "shutdown" for these VMs.
+# - shutdown : Sends an ACPI shutdown signal to the VM (Performs clean OS stop)
+#              (Recommended if you experience GPU state reset issues on resume)
+# - none     : Leaves the VM running (Let QEMU/kernel handle S3 suspend)
+VM_SUSPEND_METHOD="shutdown"
+
+
+
+# --- Active Process Protection ---
+# List of process names that, if running, will block power-saving suspension.
+# This prevents putting the system to sleep during active administrative tasks.
+PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
+
+# --- Multi-Guest Dynamic Orchestration Map ---
+# Comma-separated list of individual VMs/LXCs that should auto-sleep/wake dynamically.
+# Format: "VMID:IP_ADDRESS:PORT/PROTOCOL:IDLE_MINUTES"
+# PROTOCOL can be 'tcp' or 'udp'.
+# If idle, the guest will be automatically suspended or shut down (based on guest rules).
+# 
+# 💡 How to find Guest values:
+#   1. VMID: Check your Proxmox Web UI or run 'qm list' (for VMs) or 'pct list' (for LXCs)
+#   2. IP_ADDRESS:
+#      - For LXCs: Run 'pct IP addresses <vmid>' on the Proxmox host.
+#      - For VMs: Check your router's DHCP leases, Proxmox UI summary, or run 
+#        'qm guest cmd <vmid> get-fsinfo' (requires QEMU Guest Agent active).
+#   3. PORT/PROTOCOL:
+#      - SSH/Console into the guest and run 'ss -tunlp' to see the exact port/protocol 
+#        (e.g., 25565/tcp, 19132/udp).
+#
+# Example: "101:192.168.11.50:25565/tcp:15,102:192.168.11.60:19132/udp:15"
+# Leave empty to disable individual guest orchestration.
+GUEST_ORCHESTRATION_MAP=""
+
+
+# --- Logs ---
+LOG_FILE="/var/log/proxmox_power.log"
+ENABLE_SYSLOG=1
+

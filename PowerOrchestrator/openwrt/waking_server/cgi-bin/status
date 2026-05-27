@@ -1,0 +1,39 @@
+#!/bin/sh
+# =============================================================================
+# OpenWrt Waking Server CGI Status Endpoint
+# File: /www_waking/cgi-bin/status
+# =============================================================================
+
+# Print HTTP headers
+echo "Content-Type: application/json"
+echo "Cache-Control: no-cache"
+echo ""
+
+CONF="/etc/homelab_power.conf"
+if [ ! -f "$CONF" ]; then
+    echo '{"status": "error", "message": "Config not found"}'
+    exit 0
+fi
+
+. "$CONF"
+
+# 1. Trigger Wake-on-LAN just in case (ensures WoL is dispatched instantly on loading the page)
+etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+
+# 2. Check if the target host's critical web services are responsive
+# We check common web interface ports (8006 for Proxmox, 80 for HTTP, 8123 for Home Assistant)
+ONLINE=0
+
+for port in 8006 80 8123; do
+    if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
+        ONLINE=1
+        break
+    fi
+done
+
+if [ "$ONLINE" -eq 1 ]; then
+    echo '{"status": "online"}'
+else
+    echo '{"status": "waking"}'
+fi
+exit 0
