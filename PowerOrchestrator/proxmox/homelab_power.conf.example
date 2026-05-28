@@ -43,7 +43,7 @@ MONITORED_PORTS="25565,32400,8006,8123,22"
 # - suspend  : Freezes the processes in RAM (Recommended for S3. Very fast resume)
 # - stop     : Performs a clean shutdown of the container
 # - none     : Leaves the container running (Let kernel handle S3 suspend)
-LXC_SUSPEND_METHOD="suspend"
+LXC_SUSPEND_METHOD="stop"
 
 # --- Virtual Machine (QEMU) Power Management ---
 # How to handle running QEMU VMs when the host is preparing to sleep.
@@ -73,9 +73,11 @@ PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
 # 💡 How to find Guest values:
 #   1. VMID: Check your Proxmox Web UI or run 'qm list' (for VMs) or 'pct list' (for LXCs)
 #   2. IP_ADDRESS:
-#      - For LXCs: Run 'pct IP addresses <vmid>' on the Proxmox host.
+#      - For LXCs: Run 'pct config <vmid> | grep ip' on the Proxmox host. 
+#        (Works even if the container is offline/stopped!)
 #      - For VMs: Check your router's DHCP leases, Proxmox UI summary, or run 
 #        'qm guest cmd <vmid> get-fsinfo' (requires QEMU Guest Agent active).
+
 #   3. PORT/PROTOCOL:
 #      - SSH/Console into the guest and run 'ss -tunlp' to see the exact port/protocol 
 #        (e.g., 25565/tcp, 19132/udp).

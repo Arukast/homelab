@@ -27,8 +27,7 @@ PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
 PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
 [ -z "$PROTO" ] && PROTO="tcp"
 
-SSH_KEY_PATH="/etc/dropbear/id_dropbear"
-SSH_CMD="ssh -i $SSH_KEY_PATH -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes root@$HOST_IP"
+SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
 
 # 1. Bind Guest IP alias to Router interface so the router answers ARPs for it
 echo "Binding IP alias $GUEST_IP/32 to br-lan..."
@@ -82,15 +81,15 @@ $SSH_CMD "if pct config $VMID >/dev/null 2>&1; then
 
 # Send Notification
 MSG="⚡ *Guest Wake-on-Demand:* Traffic detected on port $PORT_RAW! Successfully resumed Guest ID $VMID ($GUEST_IP) on Proxmox."
-if [ -f "/usr/bin/telegram_notify.sh" ]; then
-    /usr/bin/telegram_notify.sh "ORCHESTRATOR" "$MSG" >/dev/null 2>&1
-elif [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-    first_user=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-    if [ -n "$first_user" ]; then
+if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
+    local target_chat="${NOTIFY_CHAT_ID}"
+    [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+    
+    if [ -n "$target_chat" ]; then
         curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${first_user}" \
+            --data-urlencode "chat_id=${target_chat}" \
             --data-urlencode "text=$MSG" \
-            --data-urlencode "parse_mode=Markdown" >/dev/null
+            --data-urlencode "parse_mode=Markdown" >/dev/null &
     fi
 fi
 

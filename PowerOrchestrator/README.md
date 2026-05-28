@@ -110,7 +110,7 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 1. **Transfer the Proxmox files**:
    Transfer the `proxmox/` directory of this suite to your Proxmox host (e.g., via SCP):
    ```bash
-   scp -r proxmox/ root@192.168.11.10:/tmp/proxmox_install
+   scp -r PowerOrchestrator/proxmox root@192.168.11.10:/tmp/proxmox_install
    ```
 2. **Run the Installer**:
    SSH into the Proxmox host and execute the installer:
@@ -143,7 +143,7 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 1. **Transfer the OpenWrt files**:
    Transfer the `openwrt/` directory to the router's `/tmp` directory:
    ```bash
-   scp -r openwrt/ root@192.168.11.1:/tmp/openwrt_install
+   scp -O -r PowerOrchestrator/openwrt/ root@192.168.11.1:/tmp/openwrt_install
    ```
 2. **Execute the Installer**:
    SSH into the OpenWrt router and run the installer:
@@ -161,7 +161,7 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 3. **Configure Bot Credentials & IPs**:
    Open `/etc/homelab_power.conf` and populate it with your Telegram details:
    ```bash
-   vi /etc/homelab_power.conf
+   nano /etc/homelab_power.conf
    ```
    Ensure you set:
    * `BOT_TOKEN`
@@ -195,6 +195,26 @@ If you want to run multiple heavy services but dynamically reclaim their memory 
 
 ---
 
+## 🎨 Phase 5: Generic Dynamic Waking Pages & Isolated Passcodes
+
+The Waking Web Landing Page is **100% self-configuring**. When you configure a guest name and dynamic passcode in `/etc/homelab_power.conf` on the router, the landing page will automatically customize its titles, descriptions, buttons, password placeholders, and browser `localStorage` storage keys to that service!
+
+1. **Configure Guest Name and Passcode Maps** in `/etc/homelab_power.conf`:
+   ```ini
+   # Mappings of Guest VMIDs to their specific friendly names and access passcodes
+   GUEST_NAME_MAP="120:Minecraft,122:Unturned,125:Valheim"
+   GUEST_PASSCODE_MAP="120:mcpass,122:unturnedpass,125:valheimpass"
+   ```
+2. **Access Dedicated Pages**:
+   You can direct players or family members directly to clean, tailored URLs using the service name or VMID:
+   - **Minecraft**: `http://ZulvaNet.ts.net/?service=minecraft` (or `?vmid=120`)
+   - **Valheim**: `http://ZulvaNet.ts.net/?service=valheim` (or `?vmid=125`)
+3. **Behavior**:
+   - The page dynamically fetches details from the router, renders *"Minecraft Verification"* (or *"Valheim Verification"*), and displays customized instructions and buttons.
+   - Verified passcodes are saved in `localStorage` under service-specific keys (e.g. `wake_code_120`), ensuring different services' passwords never overwrite or conflict with each other!
+
+---
+
 ## 🛠️ Verification & Operations Guide
 
 ### How to verify ACPI S3 capability on Proxmox:
@@ -205,12 +225,43 @@ rtcwake -m mem -s 30
 ```
 If the host successfully sleeps and resumes keyboard, network, and disk states after 30 seconds, your hardware supports S3 flawlessly!
 
-### Checking Bot Status from Telegram:
-Once active, message your bot:
-* `/status` - Will check if Proxmox is sleeping or awake. If awake, it displays load average, RAM utilization, and running guest counts.
-* `/list` - Displays all containers/VMs and their states.
-* `/ct_start <vmid>` - Wakes the host if sleeping and boots the guest VM/container.
-* `/ct_stop <vmid>` - Performs clean shutdowns of the guest.
+### 🤖 Telegram Bot Control & Commands
+
+Once active, search for your bot in Telegram and start interaction. 
+
+#### Available Commands:
+* **⚡ Host Power Control**:
+  * `/status` - Check host power (ONLINE/OFFLINE), PVE resource status (CPU Load, RAM Usage), and guest counts.
+  * `/wake` - Forcefully wake the Proxmox host using Wake-on-LAN (Magic Packet).
+  * `/sleep` - Safely suspend guest nodes and sleep the host.
+    > [!IMPORTANT]
+    > **Manual vs. Automated Sleep Design:**
+    > * **Automated (Idle Checks):** The background cron job running on Proxmox evaluates `proxmox_idle_monitor.sh` continuously. It **will block** sleep if an orchestrated container is in its 15-minute countdown, if CPU/network activity is high, or if you have open active SSH sessions (port 22) or Web UI sessions (port 8006).
+    > * **Manual (Force Override):** Typing `/sleep` in Telegram triggers the command on Proxmox using a `--force` override. This **bypasses all idle, network, and SSH block rules**, immediately suspending/stopping all running containers and putting the host to sleep.
+  * `/host_shutdown` - Gracefully shutdown the Proxmox host completely.
+  * `/host_reboot` - Reboot the Proxmox host.
+* **🖥️ Guest Node Control**:
+  * `/list` - List all LXC containers and QEMU VMs with their status (running/stopped).
+  * `/ct_start <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
+  * `/ct_stop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
+  * `/ct_restart <vmid>` - Restarts the specific VM or container.
+
+#### ⚙️ Registering Commands with BotFather:
+To enable auto-completion menu for commands in Telegram:
+1. Message **[@BotFather](https://t.me/BotFather)** on Telegram.
+2. Send `/setcommands` and choose your Homelab Bot.
+3. Paste the following block exactly:
+   ```text
+   status - Check host power and PVE resource status
+   wake - Wake the Proxmox host (Wake-on-LAN)
+   sleep - Safely suspend guest nodes and sleep host
+   host_shutdown - Gracefully shutdown the Proxmox host
+   host_reboot - Reboot the Proxmox host
+   list - List all LXC containers and VMs
+   ct_start - Start a specific VM or container (e.g. /ct_start 101)
+   ct_stop - Stop a specific VM or container (e.g. /ct_stop 101)
+   ct_restart - Restart a specific VM or container (e.g. /ct_restart 101)
+   ```
 
 ---
 

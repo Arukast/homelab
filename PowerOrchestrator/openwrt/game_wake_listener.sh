@@ -45,15 +45,15 @@ etherwake -i br-lan "$HOST_MAC"
 
 # 2. Dispatch notifications
 MSG="🎮 *Game Player Connection:* Player detected on port $PORT_RAW! Sending Wake-on-LAN to Proxmox ($HOST_MAC)..."
-if [ -f "/usr/bin/telegram_notify.sh" ]; then
-    /usr/bin/telegram_notify.sh "GAMES" "$MSG" >/dev/null 2>&1
-elif [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-    first_user=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-    if [ -n "$first_user" ]; then
+if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
+    local target_chat="${NOTIFY_CHAT_ID}"
+    [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+    
+    if [ -n "$target_chat" ]; then
         curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${first_user}" \
+            --data-urlencode "chat_id=${target_chat}" \
             --data-urlencode "text=$MSG" \
-            --data-urlencode "parse_mode=Markdown" >/dev/null
+            --data-urlencode "parse_mode=Markdown" >/dev/null &
     fi
 fi
 

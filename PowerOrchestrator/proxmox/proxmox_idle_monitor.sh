@@ -36,7 +36,20 @@ log() {
 # Ensure log file exists
 touch "$LOG_FILE"
 
-log "=== Running Idle Check Cycle ==="
+# Parse arguments
+FORCE_SLEEP=0
+if [ "$1" = "--force" ] || [ "$1" = "force" ]; then
+    FORCE_SLEEP=1
+fi
+
+if [ "$FORCE_SLEEP" -eq 1 ]; then
+    log "=== Manual Force Sleep Triggered ==="
+else
+    log "=== Running Idle Check Cycle ==="
+fi
+
+# Run activity and idle checks only if not forced
+if [ "$FORCE_SLEEP" -eq 0 ]; then
 
 # 0. Individual Guest Auto-Sleep Check
 if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
@@ -46,16 +59,13 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
     CURRENT_TIME=$(date +%s)
     
     NEW_STATES=""
+    ORCHESTRATED_GUESTS_RUNNING=0
     
     for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
         VMID=$(echo "$entry" | cut -d':' -f1)
         GUEST_IP=$(echo "$entry" | cut -d':' -f2)
         PORT_RAW=$(echo "$entry" | cut -d':' -f3)
         TIMEOUT_MIN=$(echo "$entry" | cut -d':' -f4)
-        
-        PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
-        PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
-        [ -z "$PROTO" ] && PROTO="tcp"
         
         GUEST_RUNNING=0
         if pct status "$VMID" >/dev/null 2>&1; then
@@ -69,14 +79,25 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
         fi
         
         if [ "$GUEST_RUNNING" -eq 1 ]; then
+            ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING + 1))
             CONN_COUNT=0
-            if command -v conntrack >/dev/null 2>&1; then
-                CONN_COUNT=$(conntrack -L -d "$GUEST_IP" -p "$PROTO" --dport "$PORT_NUM" 2>/dev/null | grep -c -E "ESTABLISHED|ASSURED")
-            else
-                CONN_COUNT=$(ss -an | grep -c -E "${GUEST_IP}:${PORT_NUM}")
-            fi
             
-            log "Guest [$VMID] ($GUEST_IP) port $PORT_NUM/$PROTO active connections: $CONN_COUNT"
+            # Support multiple ports separated by + (e.g. 25565/tcp+19132/udp)
+            for sub_port in $(echo "$PORT_RAW" | tr '+' ' '); do
+                sub_port_num=$(echo "$sub_port" | cut -d'/' -f1)
+                sub_proto=$(echo "$sub_port" | cut -d'/' -f2 -s)
+                [ -z "$sub_proto" ] && sub_proto="tcp"
+                
+                sub_count=0
+                if command -v conntrack >/dev/null 2>&1; then
+                    sub_count=$(conntrack -L -d "$GUEST_IP" -p "$sub_proto" --dport "$sub_port_num" 2>/dev/null | grep -c -E "ESTABLISHED|ASSURED")
+                else
+                    sub_count=$(ss -an | grep -c -E "${GUEST_IP}:${sub_port_num}")
+                fi
+                CONN_COUNT=$((CONN_COUNT + sub_count))
+            done
+            
+            log "Guest [$VMID] ($GUEST_IP) ports $PORT_RAW active connections: $CONN_COUNT"
             
             if [ "$CONN_COUNT" -eq 0 ]; then
                 START_TIME=$(grep -E "^${VMID}:" "$STATE_FILE" | cut -d':' -f2)
@@ -91,6 +112,7 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
                     
                     if [ "$ELAPSED" -ge "$TIMEOUT_SEC" ]; then
                         log "Guest [$VMID] idle timeout reached. Preparing to suspend/stop..."
+                        ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING - 1))
                         if pct status "$VMID" >/dev/null 2>&1; then
                             if [ "$LXC_SUSPEND_METHOD" = "suspend" ]; then
                                 log "Suspending LXC [$VMID]..."
@@ -120,6 +142,11 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
     done
     
     echo -e "$NEW_STATES" | sed '/^$/d' > "$STATE_FILE"
+    
+    if [ "$ORCHESTRATED_GUESTS_RUNNING" -gt 0 ]; then
+        log "BLOCK: Orchestrated guest(s) are still active or waiting for idle timeout. Host is NOT idle."
+        exit 0
+    fi
 fi
 
 # 1. Check Protected Processes
@@ -180,6 +207,8 @@ for port in $(echo "$MONITORED_PORTS" | tr ',' ' '); do
         exit 0
     fi
 done
+
+fi
 
 log "CONFIRM: All idle checks passed. Preparing to transition to power-saving mode."
 

@@ -17,23 +17,232 @@ fi
 
 . "$CONF"
 
-# 1. Trigger Wake-on-LAN just in case (ensures WoL is dispatched instantly on loading the page)
-etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
-
-# 2. Check if the target host's critical web services are responsive
-# We check common web interface ports (8006 for Proxmox, 80 for HTTP, 8123 for Home Assistant)
-ONLINE=0
-
-for port in 8006 80 8123; do
-    if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
-        ONLINE=1
-        break
+# Telegram notification helper (runs in background to keep HTTP fast)
+notify_telegram() {
+    local text="$1"
+    if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
+        local target_chat="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        
+        if [ -n "$target_chat" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${target_chat}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "parse_mode=Markdown" >/dev/null &
+        fi
     fi
-done
+}
+
+
+# Parse query string parameters (vmid, service, name, code, and trigger)
+VMID=$(echo "$QUERY_STRING" | grep -oE "(vmid|service|name)=[^&]+" | cut -d'=' -f2 2>/dev/null | tr 'A-Z' 'a-z')
+CODE_RAW=$(echo "$QUERY_STRING" | grep -oE "code=[^&]+" | cut -d'=' -f2 2>/dev/null)
+TRIGGER=$(echo "$QUERY_STRING" | grep -oE "trigger=[^&]+" | cut -d'=' -f2 2>/dev/null)
+
+# Robust Busybox-native URL decoder using AWK
+url_decode() {
+    echo "$1" | awk '
+    BEGIN {
+        for (i=0; i<256; i++) {
+            char = sprintf("%c", i)
+            hex = sprintf("%02x", i)
+            hexcodes[hex] = char
+            hexcodes[toupper(hex)] = char
+        }
+    }
+    {
+        gsub(/\+/, " ")
+        while (match($0, /%[0-9A-Fa-f]{2}/)) {
+            code = substr($0, RSTART+1, 2)
+            $0 = substr($0, 1, RSTART-1) hexcodes[code] substr($0, RSTART+3)
+        }
+        print $0
+    }'
+}
+
+CODE=$(url_decode "$CODE_RAW")
+
+# Translate friendly name to numeric VMID using GUEST_NAME_MAP if non-numeric
+if [ -n "$VMID" ] && ! echo "$VMID" | grep -qE "^[0-9]+$"; then
+    FOUND_VMID=$(echo "$GUEST_NAME_MAP" | tr ',' '\n' | while read -r mapping; do
+        id=$(echo "$mapping" | cut -d':' -f1)
+        name=$(echo "$mapping" | cut -d':' -f2 | tr 'A-Z' 'a-z')
+        if [ "$name" = "$VMID" ]; then
+            echo "$id"
+            break
+        fi
+    done)
+    if [ -n "$FOUND_VMID" ]; then
+        VMID="$FOUND_VMID"
+    fi
+fi
+
+# If VMID is provided, run in Multi-Tenant Guest Waking mode
+if [ -n "$VMID" ]; then
+    # 1. Look up friendly name and passcode
+    GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+    [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
+    
+    TARGET_PASSCODE=$(echo "$GUEST_PASSCODE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+    [ -z "$TARGET_PASSCODE" ] && TARGET_PASSCODE="$WAKE_PASSCODE"
+
+    GUEST_MESSAGE=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2- 2>/dev/null)
+    
+    # Extract guest IP from the main guest map
+    GUEST_IP=$(echo "$GUEST_ORCHESTRATION_MAP" | grep -oE "${VMID}:[^:]+" | cut -d':' -f2 2>/dev/null)
+    
+    # 2. Check if the Guest IP is online
+    GUEST_ONLINE=0
+    if [ -n "$GUEST_IP" ]; then
+        if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
+            GUEST_ONLINE=1
+        fi
+    fi
+    
+    # 3. If no code was submitted, just return the status, the name, and resolved VMID
+    if [ -z "$CODE" ]; then
+        if [ "$GUEST_ONLINE" -eq 1 ]; then
+            echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
+        else
+            echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
+        fi
+        exit 0
+    fi
+    
+    # 4. If code is submitted, verify it
+    if [ "$CODE" != "$TARGET_PASSCODE" ]; then
+        echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\"}"
+        exit 0
+    fi
+    
+    # 5. If already online, just return status and skip waking
+    if [ "$GUEST_ONLINE" -eq 1 ]; then
+        echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
+        exit 0
+    fi
+
+    # 6. Correct passcode and guest is offline! Trigger Wake sequence
+    # Wake the Proxmox host if it is down
+    if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        if [ "$TRIGGER" = "1" ]; then
+            notify_telegram "🌐 *Waking Guest:* Web wake request received for *$GUEST_NAME* (VMID $VMID). Waking host first..."
+        fi
+        etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+    else
+        if [ "$TRIGGER" = "1" ]; then
+            notify_telegram "🌐 *Waking Guest:* Web wake request received for *$GUEST_NAME* (VMID $VMID)."
+        fi
+    fi
+    
+    SSH_KEY_PATH="/etc/dropbear/id_dropbear"
+    SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+    
+    # Run the guest resume in background to avoid blocking the HTTP response
+    (
+        # Wait for host to be pingable
+        while true; do
+            if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+        done
+        
+        $SSH_CMD "if pct config $VMID >/dev/null 2>&1; then 
+                    pct resume $VMID >/dev/null 2>&1 || pct start $VMID >/dev/null 2>&1
+                  elif qm config $VMID >/dev/null 2>&1; then 
+                    qm resume $VMID >/dev/null 2>&1 || qm start $VMID >/dev/null 2>&1
+                  fi" >/dev/null 2>&1
+                  
+        # Notify when awake
+        if [ "$TRIGGER" = "1" ] && [ -n "$GUEST_IP" ]; then
+            max_retries=60
+            while [ $max_retries -gt 0 ]; do
+                if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
+                    notify_telegram "✅ *$GUEST_NAME* is now Awake and Online! Ready to connect."
+                    break
+                fi
+                sleep 5
+                max_retries=$((max_retries - 1))
+            done
+        fi
+    ) &
+    
+    if [ "$GUEST_ONLINE" -eq 1 ]; then
+        echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
+    else
+        echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
+    fi
+    exit 0
+fi
+
+# --- GLOBAL HOST WAKING MODE (Default if no VMID provided) ---
+# 1. Check if the target host is responsive (ping or port probe)
+ONLINE=0
+if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+    ONLINE=1
+else
+    for port in 8006 80 8123; do
+        if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
+            ONLINE=1
+            break
+        fi
+    done
+fi
+
+# 2. If no code was submitted, just return the status and the name
+if [ -z "$CODE" ]; then
+    if [ "$ONLINE" -eq 1 ]; then
+        echo '{"status": "online", "name": "Homelab"}'
+    else
+        echo '{"status": "sleeping", "name": "Homelab"}'
+    fi
+    exit 0
+fi
+
+# 3. Security Check: Passcode Verification (If WAKE_PASSCODE is set and code is submitted)
+if [ -n "$WAKE_PASSCODE" ]; then
+    if [ "$CODE" != "$WAKE_PASSCODE" ]; then
+        echo '{"status": "unauthorized", "message": "Invalid passcode", "name": "Homelab"}'
+        exit 0
+    fi
+fi
+
+# 4. Correct passcode! Trigger Wake-on-LAN and send notification (Only once on trigger=1)
+if [ "$ONLINE" -eq 0 ]; then
+    if [ "$TRIGGER" = "1" ]; then
+        notify_telegram "⚡ *Waking Host:* Wake-on-LAN request received for *Homelab Host* via Waking Web Page."
+        
+        # Monitor and notify when awake
+        (
+            max_retries=60
+            while [ $max_retries -gt 0 ]; do
+                HOST_IS_UP=0
+                if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                    HOST_IS_UP=1
+                else
+                    for port in 8006 80 8123; do
+                        if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
+                            HOST_IS_UP=1
+                            break
+                        fi
+                    done
+                fi
+                
+                if [ "$HOST_IS_UP" -eq 1 ]; then
+                    notify_telegram "✅ *Homelab Host* is now Awake and Online! Dashboard is accessible."
+                    break
+                fi
+                sleep 5
+                max_retries=$((max_retries - 1))
+            done
+        ) &
+    fi
+    etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+fi
 
 if [ "$ONLINE" -eq 1 ]; then
-    echo '{"status": "online"}'
+    echo '{"status": "online", "name": "Homelab"}'
 else
-    echo '{"status": "waking"}'
+    echo '{"status": "waking", "name": "Homelab"}'
 fi
 exit 0

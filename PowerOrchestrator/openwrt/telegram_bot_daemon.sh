@@ -19,7 +19,7 @@ if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
     exit 1
 fi
 
-SSH_CMD="ssh -i $SSH_KEY_PATH -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes root@$HOST_IP"
+SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
 
 # Helper to send messages to Telegram
 send_message() {
@@ -52,11 +52,14 @@ Available commands:
 👉 \`/status\` - Check host power and PVE resource status
 👉 \`/wake\` - Wake the Proxmox host (Wake-on-LAN)
 👉 \`/sleep\` - Safely suspend guest nodes and sleep host
+👉 \`/host_shutdown\` - Gracefully shutdown the Proxmox host
+👉 \`/host_reboot\` - Reboot the Proxmox host
 
 🖥️ *Guest Node Control:*
 👉 \`/list\` - List all LXC containers and VMs
 👉 \`/ct_start <vmid>\` - Start a specific VM or container
-👉 \`/ct_stop <vmid>\` - Stop a specific VM or container"
+👉 \`/ct_stop <vmid>\` - Stop a specific VM or container
+👉 \`/ct_restart <vmid>\` - Restart a specific VM or container"
             send_message "$chat_id" "$help_msg"
             ;;
             
@@ -109,10 +112,30 @@ Available commands:
                 return
             fi
             
-            send_message "$chat_id" "💤 Triggering suspension monitor on Proxmox..."
-            # Run the idle monitor script on Proxmox in background so it doesn't block the bot when it suspends
-            $SSH_CMD "nohup /usr/local/bin/proxmox_idle_monitor.sh >/dev/null 2>&1 &" 2>/dev/null
-            send_message "$chat_id" "✅ Sleep request sent. The host will evaluate idle rules, suspend guest nodes, and sleep shortly."
+            send_message "$chat_id" "💤 Triggering manual sleep sequence on Proxmox..."
+            # Run the idle monitor script on Proxmox in background with --force so it doesn't block the bot and suspends immediately
+            $SSH_CMD "nohup /usr/local/bin/proxmox_idle_monitor.sh --force >/dev/null 2>&1 &" 2>/dev/null
+            send_message "$chat_id" "✅ Sleep command executed. Proxmox will gracefully suspend guests and sleep."
+            ;;
+            
+        /host_shutdown)
+            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                send_message "$chat_id" "😴 Host is already offline."
+                return
+            fi
+            send_message "$chat_id" "🛑 Sending shutdown command to Proxmox host..."
+            $SSH_CMD "shutdown -h now" 2>/dev/null &
+            send_message "$chat_id" "✅ Shutdown initiated."
+            ;;
+            
+        /host_reboot)
+            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                send_message "$chat_id" "😴 Host is offline."
+                return
+            fi
+            send_message "$chat_id" "🔄 Sending reboot command to Proxmox host..."
+            $SSH_CMD "reboot" 2>/dev/null &
+            send_message "$chat_id" "✅ Reboot initiated."
             ;;
             
         /list)
@@ -121,8 +144,8 @@ Available commands:
                 return
             fi
             
-            local lxcs=$($SSH_CMD "pct list | awk 'NR>1 {print \"• LXC [\" \$1 \"]: \" \$2}'" 2>/dev/null)
-            local vms=$($SSH_CMD "qm list | awk 'NR>1 {print \"• VM [\" \$1 \"]: \" \$3}'" 2>/dev/null)
+            local lxcs=$($SSH_CMD "pct list | awk 'NR>1 {print \"• LXC [\" \$1 \"] (\" \$3 \"): \" \$2}'" 2>/dev/null)
+            local vms=$($SSH_CMD "qm list | awk 'NR>1 {print \"• VM [\" \$1 \"] (\" \$2 \"): \" \$3}'" 2>/dev/null)
             
             [ -z "$lxcs" ] && lxcs="None configured."
             [ -z "$vms" ] && vms="None configured."
@@ -194,6 +217,34 @@ ${stop_out:-Stop signal dispatched}
 \`\`\`"
             ;;
             
+        /ct_restart)
+            if [ -z "$arg1" ]; then
+                send_message "$chat_id" "⚠️ Usage: \`/ct_restart <vmid>\`"
+                return
+            fi
+            
+            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                send_message "$chat_id" "😴 Host is offline."
+                return
+            fi
+            
+            send_message "$chat_id" "🔄 Restarting guest node $arg1..."
+            local res_out
+            if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
+                res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
+            elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
+                res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
+            else
+                send_message "$chat_id" "❌ Guest ID $arg1 not found on Proxmox."
+                return
+            fi
+            
+            send_message "$chat_id" "✅ Node restart response:
+\`\`\`
+${res_out:-Restart signal dispatched}
+\`\`\`"
+            ;;
+            
         *)
             send_message "$chat_id" "❓ Unknown command. Send \`/help\` to see available commands."
             ;;
@@ -221,7 +272,7 @@ while true; do
     fi
     
     # Get total count of updates
-    COUNT=$(echo "$UPDATES" | jsonfilter -e '@.result.length()')
+    COUNT=$(echo "$UPDATES" | jsonfilter -e '@.result[*].update_id' 2>/dev/null | wc -l)
     if [ -z "$COUNT" ] || [ "$COUNT" -eq 0 ]; then
         continue
     fi

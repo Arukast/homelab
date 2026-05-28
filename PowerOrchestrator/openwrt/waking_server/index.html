@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Homelab Power Orchestrator</title>
+    <title>Arukast Homelab</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-color: #030712;
             --card-bg: rgba(17, 24, 39, 0.7);
             --border-color: rgba(255, 255, 255, 0.08);
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
             --accent-green: #10b981;
             --text-primary: #f3f4f6;
             --text-secondary: #9ca3af;
@@ -45,12 +48,13 @@
             opacity: 0.15;
             z-index: 1;
             pointer-events: none;
+            transition: background 0.8s ease;
         }
 
         .glow-1 {
             width: 400px;
             height: 400px;
-            background: var(--accent-blue);
+            background: var(--accent-primary);
             top: -100px;
             left: -100px;
         }
@@ -58,7 +62,7 @@
         .glow-2 {
             width: 500px;
             height: 500px;
-            background: var(--accent-purple);
+            background: var(--accent-secondary);
             bottom: -150px;
             right: -100px;
         }
@@ -92,33 +96,34 @@
 
         .pulse-ring {
             position: absolute;
-            border: 2px solid var(--accent-blue);
+            border: 2px solid var(--accent-primary);
             border-radius: 50%;
             opacity: 0;
             animation: pulse-out 3s infinite cubic-bezier(0.21, 0.85, 0.44, 1);
+            transition: border-color 0.8s ease;
         }
 
         .pulse-ring:nth-child(2) {
             animation-delay: 1s;
-            border-color: var(--accent-purple);
+            border-color: var(--accent-secondary);
         }
 
         .pulse-ring:nth-child(3) {
             animation-delay: 2s;
-            border-color: var(--accent-blue);
+            border-color: var(--accent-primary);
         }
 
         .server-avatar {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
             z-index: 2;
-            transition: all 0.5s ease;
+            transition: all 0.5s ease, background 0.8s ease, box-shadow 0.8s ease;
         }
 
         .server-avatar svg {
@@ -167,7 +172,7 @@
         .progress-bar {
             width: 0%;
             height: 100%;
-            background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+            background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             border-radius: 100px;
             box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
             transition: width 0.3s ease;
@@ -208,6 +213,7 @@
                 height: 80px;
                 opacity: 0.8;
             }
+
             100% {
                 width: 150px;
                 height: 150px;
@@ -216,14 +222,29 @@
         }
 
         @keyframes blink {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
+
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
         }
 
         @keyframes success-pop {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.15); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.15);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
 
         .success-anim {
@@ -231,32 +252,58 @@
         }
     </style>
 </head>
+
 <body>
     <div class="glow-blob glow-1"></div>
     <div class="glow-blob glow-2"></div>
 
     <div class="card" id="main-card">
-        <div class="avatar-container">
-            <div class="pulse-ring" id="ring1"></div>
-            <div class="pulse-ring" id="ring2"></div>
-            <div class="pulse-ring" id="ring3"></div>
-            <div class="server-avatar" id="avatar">
-                <svg viewBox="0 0 24 24" id="server-icon">
-                    <path d="M4,17H20V15H4V17M4,9H20V7H4V9M19,22H5C3.89,22 3,21.1 3,20V4C3,2.9 3.89,2 5,2H19C20.1,2 21,2.9 21,4V20C21,21.1 20.1,22 19,22M5,4V20H19V4H5M11,10H13V12H11V10M11,16H13V18H11V16Z" />
-                </svg>
+        <!-- Passcode Entry Form -->
+        <div id="passcode-block" style="display: none;">
+            <h1 id="passcode-title" style="margin-bottom: 16px;">Access Verification</h1>
+            <p id="passcode-desc" style="margin-bottom: 24px;">This homelab is secured. Please enter the passcode to
+                initiate the server wake sequence.</p>
+            <input type="password" id="passcode-input" placeholder="Enter passcode..."
+                style="width: 100%; padding: 14px 20px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.3); color: #fff; text-align: center; font-size: 16px; margin-bottom: 16px; outline: none; transition: all 0.3s; font-family: inherit;">
+            <div id="remember-me-container"
+                style="display: flex; align-items: center; justify-content: flex-start; margin-bottom: 24px;">
+                <input type="checkbox" id="remember-me" checked
+                    style="width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: pointer; margin-right: 10px;">
+                <label for="remember-me"
+                    style="color: var(--text-secondary); font-size: 14px; cursor: pointer; user-select: none;">Remember
+                    my passcode</label>
             </div>
+            <button id="passcode-submit"
+                style="width: 100%; padding: 14px; border-radius: 14px; border: none; background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s; font-family: inherit;">Verify
+                & Wake Host</button>
         </div>
 
-        <h1 id="title">Homelab is Sleeping</h1>
-        <p id="description">Your web request has triggered a Wake-on-LAN signal. The server is booting and self-hosted services are mounting.</p>
+        <!-- Active Loader Screen -->
+        <div id="loading-block">
+            <div class="avatar-container">
+                <div class="pulse-ring" id="ring1"></div>
+                <div class="pulse-ring" id="ring2"></div>
+                <div class="pulse-ring" id="ring3"></div>
+                <div class="server-avatar" id="avatar">
+                    <svg viewBox="0 0 24 24" id="server-icon">
+                        <path
+                            d="M4,17H20V15H4V17M4,9H20V7H4V9M19,22H5C3.89,22 3,21.1 3,20V4C3,2.9 3.89,2 5,2H19C20.1,2 21,2.9 21,4V20C21,21.1 20.1,22 19,22M5,4V20H19V4H5M11,10H13V12H11V10M11,16H13V18H11V16Z" />
+                    </svg>
+                </div>
+            </div>
 
-        <div class="progress-container">
-            <div class="progress-bar" id="progress"></div>
-        </div>
+            <h1 id="title">Homelab is Sleeping</h1>
+            <p id="description">Your web request has triggered a Wake-on-LAN signal. The server is booting and
+                self-hosted services are mounting.</p>
 
-        <div class="status-badge">
-            <span class="status-dot" id="dot"></span>
-            <span id="badge-text">Waking Host...</span>
+            <div class="progress-container">
+                <div class="progress-bar" id="progress"></div>
+            </div>
+
+            <div class="status-badge">
+                <span class="status-dot" id="dot"></span>
+                <span id="badge-text">Waking Host...</span>
+            </div>
         </div>
     </div>
 
@@ -272,35 +319,246 @@
         const dotEl = document.getElementById('dot');
         const badgeEl = document.getElementById('badge-text');
 
-        // Smooth progress bar pacing
-        const progressInterval = setInterval(() => {
-            // Speed up initially, then slow down as it gets closer to 95% (waiting for real boot)
-            if (progressWidth < 60) {
-                progressWidth += 2;
-            } else if (progressWidth < 85) {
-                progressWidth += 0.8;
-            } else if (progressWidth < 95) {
-                progressWidth += 0.2;
-            }
-            progressEl.style.width = progressWidth + '%';
-        }, 300);
+        // Passcode elements
+        const passcodeBlock = document.getElementById('passcode-block');
+        const loadingBlock = document.getElementById('loading-block');
+        const passcodeInput = document.getElementById('passcode-input');
+        const passcodeSubmit = document.getElementById('passcode-submit');
 
-        // Check host boot status via local CGI script
-        function checkStatus() {
-            fetch('/cgi-bin/status')
+        // Parse query params
+        const urlParams = new URLSearchParams(window.location.search);
+        const vmidParam = urlParams.get('vmid') || urlParams.get('service') || urlParams.get('name') || '';
+
+        // Isolate localStorage key per service
+        const storageKey = vmidParam ? 'wake_code_' + vmidParam.toLowerCase().replace(/[^a-z0-9]/g, '') : 'wake_code_host';
+        let storedCode = localStorage.getItem(storageKey) || '';
+
+        let serviceName = "Homelab";
+        let resolvedVmid = "";
+
+        // Apply theme based on service name
+        function applyServiceTheme(name) {
+            const lowerName = name.toLowerCase();
+            let primaryColor = "#3b82f6"; // Default Cyber Blue
+            let secondaryColor = "#8b5cf6"; // Default Quantum Purple
+            let customIconSvg = null;
+
+            if (lowerName.includes("minecraft")) {
+                primaryColor = "#10b981"; // Emerald Green
+                secondaryColor = "#b45309"; // Dirt Brown / Gold
+                // Beautiful dynamic pixel grass block SVG
+                customIconSvg = `
+                    <svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;">
+                        <path d="M12,2L2,7L12,12L22,7L12,2M2,9V19L12,22V12L2,9M14,13V21.5L22,17.5V9L14,13M12,14.5L6,12.5V17L12,19.5V14.5Z" />
+                    </svg>
+                `;
+            } else if (lowerName.includes("unturned")) {
+                primaryColor = "#84cc16"; // Zombie Lime
+                secondaryColor = "#ea580c"; // Rust Orange
+                // Biohazard hazard sign SVG
+                customIconSvg = `
+                    <svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;">
+                        <path d="M12,2C11.5,2 11,2.4 11,3V6.05C9.47,6.4 8.16,7.24 7.21,8.37L5.13,6.29C4.74,5.9 4.11,5.9 3.72,6.29C3.33,6.68 3.33,7.31 3.72,7.7L5.8,9.78C4.67,10.73 3.83,12.04 3.48,13.57H0.5C0,13.57 0,14.07 0,14.57C0,15.07 0,15.57 0.5,15.57H3.48C3.83,17.1 4.67,18.41 5.8,19.36L3.72,21.44C3.33,21.83 3.33,22.46 3.72,22.85C4.11,23.24 4.74,23.24 5.13,22.85L7.21,20.77C8.16,21.9 9.47,22.74 11,23.09V26C11,26.5 11.5,26.5 12,26.5C12.5,26.5 13,26.5 13,26V23.09C14.53,22.74 15.84,21.9 16.79,20.77L18.87,22.85C19.26,23.24 19.89,23.24 20.28,22.85C20.67,22.46 20.67,21.83 20.28,21.44L18.2,19.36C19.33,18.41 20.17,17.1 20.52,15.57H23.5C24,15.57 24,15.07 24,14.57C24,14.07 24,13.57 23.5,13.57H20.52C20.17,12.04 19.33,10.73 18.2,9.78L20.28,7.7C20.67,7.31 20.67,6.68 20.28,6.29C19.89,5.9 19.26,5.9 18.87,6.29L16.79,8.37C15.84,7.24 14.53,6.4 13,6.05V3C13,2.4 12.5,2 12,2M12,9A5.5,5.5 0 0,1 17.5,14.5A5.5,5.5 0 0,1 12,20A5.5,5.5 0 0,1 6.5,14.5A5.5,5.5 0 0,1 12,9Z" />
+                    </svg>
+                `;
+            } else if (vmidParam) {
+                // Generic guest theme: Amber / Fire
+                primaryColor = "#f59e0b"; // Amber Orange
+                secondaryColor = "#ef4444"; // Crimson Red
+                // Epic gaming console/cube style SVG
+                customIconSvg = `
+                    <svg viewBox="0 0 24 24" id="server-icon" style="width:40px; height:40px; fill:#ffffff;">
+                        <path d="M21,16.5C21,16.88 20.79,17.21 20.47,17.37L12.57,21.82C12.21,22.02 11.79,22.02 11.43,21.82L3.53,17.37C3.21,17.21 3,16.88 3,16.5V7.5C3,7.12 3.21,6.79 3.53,6.63L11.43,2.18C11.79,1.98 12.21,1.98 12.57,2.18L20.47,6.63C20.79,6.79 21,7.12 21,7.5V16.5M12,4.15L6.04,7.5L12,10.85L17.96,7.5L12,4.15M5,9.22V15.65L11,19.03V12.61L5,9.22M19,9.22L13,12.61V19.03L19,15.65V9.22Z" />
+                    </svg>
+                `;
+            }
+
+            // Apply to document CSS variables dynamically!
+            document.documentElement.style.setProperty('--accent-primary', primaryColor);
+            document.documentElement.style.setProperty('--accent-secondary', secondaryColor);
+
+            if (customIconSvg && document.getElementById('server-icon')) {
+                const parent = document.getElementById('server-icon').parentElement;
+                parent.innerHTML = customIconSvg;
+            }
+        }
+
+        // Passcode Input UI Styling on focus
+        passcodeInput.addEventListener('focus', () => {
+            passcodeInput.style.borderColor = 'var(--accent-primary)';
+            passcodeInput.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.2)';
+        });
+        passcodeInput.addEventListener('blur', () => {
+            passcodeInput.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+            passcodeInput.style.boxShadow = 'none';
+        });
+
+        // Submit passcode
+        passcodeSubmit.addEventListener('click', submitCode);
+        passcodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') submitCode();
+        });
+
+        function submitCode() {
+            const code = passcodeInput.value.trim();
+            if (code) {
+                // Instantly disable button to prevent DDoS spamming
+                passcodeSubmit.disabled = true;
+                passcodeSubmit.innerText = "Verifying Access...";
+                passcodeSubmit.style.opacity = "0.7";
+                passcodeSubmit.style.cursor = "not-allowed";
+
+                if (document.getElementById('remember-me').checked) {
+                    localStorage.setItem(storageKey, code);
+                } else {
+                    localStorage.removeItem(storageKey);
+                }
+                storedCode = code;
+
+                // Add a small 800ms debounce delay before transitioning UI
+                setTimeout(() => {
+                    passcodeBlock.style.display = 'none';
+                    loadingBlock.style.display = 'block';
+
+                    // Reset button style for potential future sessions
+                    passcodeSubmit.disabled = false;
+                    passcodeSubmit.innerText = "Verify & Wake " + serviceName;
+                    passcodeSubmit.style.opacity = "1";
+                    passcodeSubmit.style.cursor = "pointer";
+
+                    startPacing();
+                    checkStatus(true);
+                }, 800);
+            }
+        }
+
+        let progressInterval;
+        function startPacing() {
+            if (progressInterval) clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                if (progressWidth < 60) {
+                    progressWidth += 2;
+                } else if (progressWidth < 85) {
+                    progressWidth += 0.8;
+                } else if (progressWidth < 95) {
+                    progressWidth += 0.2;
+                }
+                progressEl.style.width = progressWidth + '%';
+            }, 300);
+        }
+
+        // Fetch initial status info to dynamically label the page and determine branding
+        function initializePage() {
+            let fetchUrl = '/cgi-bin/status?';
+            if (vmidParam) fetchUrl += 'vmid=' + encodeURIComponent(vmidParam);
+
+            fetch(fetchUrl)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status === 'online') {
+                    serviceName = data.name || "Homelab";
+                    resolvedVmid = data.vmid || vmidParam;
+
+                    // Style the cards dynamically
+                    applyServiceTheme(serviceName);
+
+                    // Dynamic text injection
+                    document.getElementById('passcode-title').innerText = serviceName + " Verification";
+                    document.getElementById('passcode-desc').innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it.";
+                    passcodeInput.placeholder = "Enter " + serviceName + " passcode...";
+                    passcodeSubmit.innerText = "Verify & Wake " + serviceName;
+
+                    titleEl.innerText = serviceName + " is Sleeping";
+                    descEl.innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it up.";
+                    badgeEl.innerText = "SLEEPING";
+
+                    // Always require explicit click to check/wake!
+                    loadingBlock.style.display = 'none';
+                    passcodeBlock.style.display = 'block';
+
+                    if (storedCode) {
+                        passcodeInput.value = storedCode;
+                        passcodeInput.style.display = 'none'; // Hide input since it's already saved
+                        document.getElementById('remember-me-container').style.display = 'none'; // Hide checkbox too
+                        document.getElementById('passcode-desc').innerText = "Click the button below to check if " + serviceName + " is online or wake it from sleep.";
+                        passcodeSubmit.innerText = "Check / Wake " + serviceName;
+                    }
+                })
+                .catch(err => {
+                    console.log("Error querying initial status", err);
+                    // Fallback routing flow in case router network is starting up
+                    applyServiceTheme("Homelab");
+                    loadingBlock.style.display = 'none';
+                    passcodeBlock.style.display = 'block';
+
+                    if (storedCode) {
+                        passcodeInput.value = storedCode;
+                        passcodeInput.style.display = 'none';
+                        document.getElementById('remember-me-container').style.display = 'none';
+                        document.getElementById('passcode-desc').innerText = "Click the button below to check if " + serviceName + " is online or wake it from sleep.";
+                        passcodeSubmit.innerText = "Check / Wake " + serviceName;
+                    }
+                });
+        }
+
+        let isOnline = false;
+
+        // Check host boot status via local CGI script
+        function checkStatus(isTrigger) {
+            if (isOnline) return; // Completely stop polling once online!
+
+            let fetchUrl = '/cgi-bin/status?';
+            if (vmidParam) fetchUrl += 'vmid=' + encodeURIComponent(vmidParam) + '&';
+            fetchUrl += 'code=' + encodeURIComponent(storedCode);
+            if (isTrigger) fetchUrl += '&trigger=1';
+
+            fetch(fetchUrl)
+                .then(response => response.json())
+                .then(data => {
+                    const serviceName = data.name || "Homelab";
+
+                    if (data.status === 'unauthorized') {
+                        clearInterval(progressInterval);
+                        localStorage.removeItem(storageKey); // Clear incorrect code
+                        progressWidth = 0;
+                        progressEl.style.width = '0%';
+
+                        // Switch to password screen with error state
+                        loadingBlock.style.display = 'none';
+                        passcodeBlock.style.display = 'block';
+                        passcodeInput.style.display = 'block'; // Ensure input is visible
+                        document.getElementById('remember-me-container').style.display = 'flex'; // Show checkbox again
+                        passcodeSubmit.innerText = "Verify & Wake " + serviceName; // Reset text
+                        passcodeInput.value = '';
+                        passcodeInput.placeholder = 'Invalid passcode, try again...';
+                        passcodeInput.style.borderColor = '#ef4444'; // Red alert border
+                        passcodeInput.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.2)';
+                    } else if (data.status === 'sleeping') {
+                        if (progressInterval) clearInterval(progressInterval);
+                        progressWidth = 0;
+                        progressEl.style.width = '0%';
+                        titleEl.innerText = serviceName + " is Sleeping";
+                        descEl.innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it up.";
+                        badgeEl.innerText = "SLEEPING";
+                        dotEl.className = "status-dot";
+
+                        loadingBlock.style.display = 'none';
+                        passcodeBlock.style.display = 'block';
+                    } else if (data.status === 'online') {
+                        isOnline = true; // Mark as online to block further network requests!
                         clearInterval(progressInterval);
                         progressEl.style.width = '100%';
-                        
+
                         // Apply success styling
-                        titleEl.innerText = "Services Restored!";
-                        descEl.innerText = "Successfully established secure connection. Redirecting to your service...";
+                        titleEl.innerText = serviceName + " Restored!";
+                        descEl.innerHTML = serviceName + " is now fully online. You can connect now!";
+                        if (data.message) {
+                            descEl.innerHTML += "<br><br><strong style='color: var(--text-primary);'>" + data.message + "</strong>";
+                        }
+
                         avatarEl.classList.add('online', 'success-anim');
-                        dotEl.classList.add('online');
+                        dotEl.className = "status-dot online"; // Static green
                         badgeEl.innerText = "ONLINE";
-                        
+
                         // Disable pulsing rings
                         ring1.style.animation = 'none';
                         ring2.style.animation = 'none';
@@ -310,26 +568,45 @@
                         ring3.style.opacity = '0';
 
                         // Success checkmark SVG injection
-                        document.getElementById('server-icon').innerHTML = '<path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />';
+                        const serverIcon = document.getElementById('server-icon');
+                        if (serverIcon) {
+                            serverIcon.outerHTML = '<svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;"><path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg>';
+                        }
 
-                        // Wait for success animation to complete, then reload (bypassing NAT redirects)
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 2000);
+                        // Hide the progress bar
+                        document.querySelector('.progress-container').style.display = 'none';
+
+                        // Show a clean button when online instead of infinite reload loops!
+                        if (!document.getElementById('redirect-link-btn')) {
+                            const successMsgBtn = document.createElement('div');
+                            successMsgBtn.id = 'redirect-link-btn';
+                            successMsgBtn.innerText = serviceName + " is Ready!";
+                            successMsgBtn.style.cssText = "display: block; width: 100%; margin-top: 24px; padding: 14px; border-radius: 14px; border: none; background: rgba(16, 185, 129, 0.2); color: var(--accent-green); font-size: 16px; font-weight: 600; text-align: center; font-family: inherit; border: 1px solid var(--accent-green);";
+                            document.getElementById('loading-block').appendChild(successMsgBtn);
+                        }
                     } else {
-                        // Keep polling
-                        setTimeout(checkStatus, 3000);
+                        // Waking/checking state
+                        titleEl.innerText = "Waking " + serviceName + "...";
+                        descEl.innerHTML = "The " + serviceName + " server is booting and unfreezing in Proxmox. Please wait a moment.";
+                        if (data.message) {
+                            descEl.innerHTML += "<br><br><strong style='color: var(--text-primary);'>" + data.message + "</strong>";
+                        }
+                        badgeEl.innerText = "WAKING";
+
+                        // Keep polling (Do not trigger spam notifications)
+                        setTimeout(() => checkStatus(false), 3000);
                     }
                 })
                 .catch(err => {
-                    // Failures are expected during the networking swap. Keep polling.
+                    // Failures are expected during networking swap. Keep polling.
                     console.log("Network status query failed, retrying...", err);
-                    setTimeout(checkStatus, 3000);
+                    setTimeout(() => checkStatus(false), 3000);
                 });
         }
 
-        // Start polling 3 seconds after load
-        setTimeout(checkStatus, 3000);
+        // Initialize!
+        initializePage();
     </script>
 </body>
+
 </html>

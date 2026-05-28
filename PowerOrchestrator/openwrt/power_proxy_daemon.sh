@@ -23,22 +23,15 @@ notify() {
     local msg="$1"
     echo "[Power Proxy] $msg"
     
-    # 1. Try sending via the existing TelegramMonitoring suite (logs to Google Sheets)
-    if [ -f "/usr/bin/telegram_notify.sh" ]; then
-        /usr/bin/telegram_notify.sh "POWER" "$msg" >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            return
-        fi
-    fi
-    
-    # 2. Fallback to direct Telegram API sending to the first allowed user ID
     if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-        local first_user=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-        if [ -n "$first_user" ]; then
+        local target_chat="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        
+        if [ -n "$target_chat" ]; then
             curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${first_user}" \
+                --data-urlencode "chat_id=${target_chat}" \
                 --data-urlencode "text=🔔 *Power Monitor:* $msg" \
-                --data-urlencode "parse_mode=Markdown" >/dev/null
+                --data-urlencode "parse_mode=Markdown" >/dev/null &
         fi
     fi
 }
@@ -139,6 +132,11 @@ manage_guest_listeners() {
         GUEST_IP=$(echo "$entry" | cut -d':' -f2)
         PORT_RAW=$(echo "$entry" | cut -d':' -f3)
         
+        # Skip Wake-on-Demand listeners if no port is defined
+        if [ -z "$PORT_RAW" ]; then
+            continue
+        fi
+        
         if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
             if pgrep -f "guest_wake_listener.sh $GUEST_IP " >/dev/null 2>&1; then
                 echo "Guest [$VMID] ($GUEST_IP) came online. Terminating listener..."
@@ -146,10 +144,12 @@ manage_guest_listeners() {
                 ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
             fi
         else
-            if ! pgrep -f "guest_wake_listener.sh $GUEST_IP " >/dev/null 2>&1; then
-                echo "Guest [$VMID] ($GUEST_IP) is offline. Starting Wake-on-Demand listener..."
-                /usr/bin/guest_wake_listener.sh "$GUEST_IP" "$PORT_RAW" "$VMID" &
-            fi
+            for sub_port in $(echo "$PORT_RAW" | tr '+' ' '); do
+                if ! pgrep -f "guest_wake_listener.sh $GUEST_IP $sub_port " >/dev/null 2>&1; then
+                    echo "Guest [$VMID] ($GUEST_IP) is offline. Starting Wake-on-Demand listener on $sub_port..."
+                    /usr/bin/guest_wake_listener.sh "$GUEST_IP" "$sub_port" "$VMID" &
+                fi
+            done
         fi
     done
 }

@@ -11,6 +11,10 @@ BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
 # e.g. "8881234,9994321". Get yours via @userinfobot or @GetMyIDBot
 ALLOWED_USER_IDS="YOUR_TELEGRAM_USER_ID"
 
+# Optional Target Telegram Chat ID for all wake notifications (can be a user ID or group chat ID).
+# If empty, defaults to the first ID in ALLOWED_USER_IDS. Group IDs typically start with a minus sign (e.g. -100123456).
+NOTIFY_CHAT_ID=""
+
 # --- Target Host Configuration ---
 # The IP address of the Proxmox VE host
 HOST_IP="192.168.11.10"
@@ -55,4 +59,21 @@ PING_RETRIES="3"
 # Example: "101:192.168.11.50:25565/tcp:15,102:192.168.11.60:19132/udp:15"
 # Leave empty if not using individual guest sleep/wake orchestration.
 GUEST_ORCHESTRATION_MAP=""
+
+# --- Waking Web Server Security ---
+# Passcode required on the Glassmorphic waking screen to allow Wake-on-LAN commands.
+# This prevents unauthorized visitors (from public Tailscale Funnel) from waking your homelab.
+WAKE_PASSCODE="YOUR_SECURE_PASSCODE"
+
+# --- Multi-Tenant Guest Waking Security & Naming Maps ---
+# Mappings of Guest VMIDs to their specific friendly names and access passcodes.
+# The Waking Web Server is fully generic and automatically adapts to any service defined here!
+# For example, adding "125:Valheim" to GUEST_NAME_MAP and "125:odinpass" to GUEST_PASSCODE_MAP
+# will instantly make http://router/?service=valheim (or ?vmid=125) render a customized
+# "Valheim Verification" page prompting for "odinpass", with ZERO code changes!
+# Format: "VMID:VALUE,VMID:VALUE"
+GUEST_NAME_MAP="120:Minecraft,122:Unturned"
+GUEST_PASSCODE_MAP="120:mcpass,122:unturnedpass"
+
+
 
