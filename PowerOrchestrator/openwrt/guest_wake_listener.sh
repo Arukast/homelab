@@ -22,6 +22,12 @@ fi
 
 . "$CONF"
 
+# Load messages config
+MSG_CONF="/etc/homelab_messages.conf"
+if [ -f "$MSG_CONF" ]; then
+    . "$MSG_CONF"
+fi
+
 # Parse port and protocol (e.g. 19132/udp -> PORT_NUM=19132, PROTO=udp)
 PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
 PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
@@ -80,7 +86,7 @@ $SSH_CMD "if pct config $VMID >/dev/null 2>&1; then
           fi" >/dev/null 2>&1
 
 # Send Notification
-MSG="⚡ *Guest Wake-on-Demand:* Traffic detected on port $PORT_RAW! Successfully resumed Guest ID $VMID ($GUEST_IP) on Proxmox."
+MSG=$(eval echo "\"$MSG_WAKE_GUEST_DEMAND\"")
 if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
     local target_chat="${NOTIFY_CHAT_ID}"
     [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)

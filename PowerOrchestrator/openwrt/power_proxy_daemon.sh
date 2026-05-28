@@ -13,6 +13,12 @@ fi
 # Load config
 . "$CONF"
 
+# Load messages config
+MSG_CONF="/etc/homelab_messages.conf"
+if [ -f "$MSG_CONF" ]; then
+    . "$MSG_CONF"
+fi
+
 # State variables
 CURRENT_STATE="UNKNOWN"
 FAILED_PINGS=0
@@ -194,7 +200,7 @@ while true; do
             stop_game_listeners
             
             if [ "$CURRENT_STATE" != "UNKNOWN" ]; then
-                notify "⚡ Proxmox host is awake. Self-hosted services are fully accessible!"
+                notify "$MSG_DAEMON_AWAKE"
             fi
             CURRENT_STATE="UP"
         fi
@@ -213,7 +219,7 @@ while true; do
             start_game_listeners
             
             if [ "$CURRENT_STATE" != "UNKNOWN" ]; then
-                notify "😴 Proxmox host entered sleep (S3). Redirection proxy and Wake-on-Demand triggers are active!"
+                notify "$MSG_DAEMON_SLEEP"
             fi
             CURRENT_STATE="DOWN"
         fi

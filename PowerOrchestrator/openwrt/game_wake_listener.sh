@@ -20,6 +20,12 @@ fi
 
 . "$CONF"
 
+# Load messages config
+MSG_CONF="/etc/homelab_messages.conf"
+if [ -f "$MSG_CONF" ]; then
+    . "$MSG_CONF"
+fi
+
 # Parse port and protocol (e.g. 19132/udp -> PORT_NUM=19132, PROTO=udp)
 PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
 PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
@@ -44,7 +50,7 @@ echo "Player connection detected on port $PORT_RAW. Initiating host wake sequenc
 etherwake -i br-lan "$HOST_MAC"
 
 # 2. Dispatch notifications
-MSG="🎮 *Game Player Connection:* Player detected on port $PORT_RAW! Sending Wake-on-LAN to Proxmox ($HOST_MAC)..."
+MSG=$(eval echo "\"$MSG_WAKE_GAME_PLAYER\"")
 if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
     local target_chat="${NOTIFY_CHAT_ID}"
     [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)

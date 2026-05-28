@@ -67,6 +67,17 @@ else
     chmod 600 /etc/homelab_power.conf
 fi
 
+# Setup Messages Configuration file
+if [ -f "/etc/homelab_messages.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
+    echo "Message configuration file /etc/homelab_messages.conf already exists. Preserving it."
+else
+    if [ -f "homelab_messages.conf" ]; then
+        cp homelab_messages.conf /etc/homelab_messages.conf
+        echo "Created/Overwrote /etc/homelab_messages.conf from your local config file."
+    fi
+    chmod 600 /etc/homelab_messages.conf
+fi
+
 # 3. Install core scripts and utilities
 echo "[3/6] Installing executable scripts..."
 cp telegram_bot_daemon.sh /usr/bin/telegram_bot_daemon.sh

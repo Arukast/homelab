@@ -13,6 +13,12 @@ fi
 # Load config
 . "$CONF"
 
+# Load messages config
+MSG_CONF="/etc/homelab_messages.conf"
+if [ -f "$MSG_CONF" ]; then
+    . "$MSG_CONF"
+fi
+
 # Check token
 if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
     echo "ERROR: BOT_TOKEN is not configured in $CONF" >&2
@@ -20,6 +26,12 @@ if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
 fi
 
 SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+
+# Helper to dynamically evaluate/expand strings containing variables
+expand_msg() {
+    local raw_msg="$1"
+    eval echo "\"$raw_msg\""
+}
 
 # Helper to send messages to Telegram
 send_message() {
@@ -45,37 +57,21 @@ process_command() {
     
     case "$action" in
         /start|/help)
-            local help_msg="🤖 *Homelab Power Orchestrator Bot*
-Available commands:
-
-⚡ *Host Power Control:*
-👉 \`/status\` - Check host power and PVE resource status
-👉 \`/wake\` - Wake the Proxmox host (Wake-on-LAN)
-👉 \`/sleep\` - Safely suspend guest nodes and sleep host
-👉 \`/host_shutdown\` - Gracefully shutdown the Proxmox host
-👉 \`/host_reboot\` - Reboot the Proxmox host
-
-🖥️ *Guest Node Control:*
-👉 \`/list\` - List all LXC containers and VMs
-👉 \`/ct_start <vmid>\` - Start a specific VM or container
-👉 \`/ct_stop <vmid>\` - Stop a specific VM or container
-👉 \`/ct_restart <vmid>\` - Restart a specific VM or container"
-            send_message "$chat_id" "$help_msg"
+            send_message "$chat_id" "$MSG_BOT_HELP"
             ;;
             
         /status)
-            send_message "$chat_id" "🔍 Querying Proxmox host status, please wait..."
+            send_message "$chat_id" "$MSG_BOT_QUERY_STATUS"
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 *Host Status:* Proxmox is currently *SLEEPING* (Offline).
-👉 Send \`/wake\` to power it up."
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")"
                 return
             fi
             
             # Host is online, gather resources via SSH
             local uptime_info=$($SSH_CMD "uptime" 2>/dev/null)
             if [ $? -ne 0 ]; then
-                send_message "$chat_id" "⚠️ *Error:* Connected to Proxmox IP but SSH connection failed. Check dropbear SSH keys."
+                send_message "$chat_id" "$MSG_BOT_SSH_FAILED"
                 return
             fi
             
@@ -101,46 +97,46 @@ Available commands:
             ;;
             
         /wake)
-            send_message "$chat_id" "⚡ Sending Wake-on-LAN magic packet to Proxmox ($HOST_MAC)..."
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_WOL_SENT")"
             etherwake -i br-lan "$HOST_MAC"
-            send_message "$chat_id" "✅ Magic packet dispatched! Host should be online in 30-45 seconds."
+            send_message "$chat_id" "$MSG_BOT_WOL_DISPATCHED"
             ;;
             
         /sleep)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is already offline/sleeping."
+                send_message "$chat_id" "$MSG_BOT_SLEEP_ALREADY_OFFLINE"
                 return
             fi
             
-            send_message "$chat_id" "💤 Triggering manual sleep sequence on Proxmox..."
+            send_message "$chat_id" "$MSG_BOT_SLEEP_TRIGGERED"
             # Run the idle monitor script on Proxmox in background with --force so it doesn't block the bot and suspends immediately
             $SSH_CMD "nohup /usr/local/bin/proxmox_idle_monitor.sh --force >/dev/null 2>&1 &" 2>/dev/null
-            send_message "$chat_id" "✅ Sleep command executed. Proxmox will gracefully suspend guests and sleep."
+            send_message "$chat_id" "$MSG_BOT_SLEEP_EXECUTED"
             ;;
             
         /host_shutdown)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is already offline."
+                send_message "$chat_id" "$MSG_BOT_SHUTDOWN_ALREADY_OFFLINE"
                 return
             fi
-            send_message "$chat_id" "🛑 Sending shutdown command to Proxmox host..."
+            send_message "$chat_id" "$MSG_BOT_SHUTDOWN_SENDING"
             $SSH_CMD "shutdown -h now" 2>/dev/null &
-            send_message "$chat_id" "✅ Shutdown initiated."
+            send_message "$chat_id" "$MSG_BOT_SHUTDOWN_EXECUTED"
             ;;
             
         /host_reboot)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is offline."
+                send_message "$chat_id" "$MSG_BOT_REBOOT_ALREADY_OFFLINE"
                 return
             fi
-            send_message "$chat_id" "🔄 Sending reboot command to Proxmox host..."
+            send_message "$chat_id" "$MSG_BOT_REBOOT_SENDING"
             $SSH_CMD "reboot" 2>/dev/null &
-            send_message "$chat_id" "✅ Reboot initiated."
+            send_message "$chat_id" "$MSG_BOT_REBOOT_EXECUTED"
             ;;
             
         /list)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Cannot list guest nodes: Proxmox host is offline."
+                send_message "$chat_id" "$MSG_BOT_LIST_HOST_OFFLINE"
                 return
             fi
             
@@ -162,16 +158,16 @@ ${vms}"
             
         /ct_start)
             if [ -z "$arg1" ]; then
-                send_message "$chat_id" "⚠️ Usage: \`/ct_start <vmid>\`"
+                send_message "$chat_id" "$MSG_BOT_CT_START_USAGE"
                 return
             fi
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is offline. Send \`/wake\` first."
+                send_message "$chat_id" "$MSG_BOT_CT_START_HOST_OFFLINE"
                 return
             fi
             
-            send_message "$chat_id" "🚀 Starting guest node $arg1..."
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
             # Detect if VM or LXC and start
             local start_out
             if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
@@ -179,11 +175,11 @@ ${vms}"
             elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
                 start_out=$($SSH_CMD "qm start $arg1" 2>&1)
             else
-                send_message "$chat_id" "❌ Guest ID $arg1 not found on Proxmox."
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_NOT_FOUND")"
                 return
             fi
             
-            send_message "$chat_id" "✅ Node start response:
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_SUCCESS")
 \`\`\`
 ${start_out:-Started successfully}
 \`\`\`"
@@ -191,27 +187,27 @@ ${start_out:-Started successfully}
             
         /ct_stop)
             if [ -z "$arg1" ]; then
-                send_message "$chat_id" "⚠️ Usage: \`/ct_stop <vmid>\`"
+                send_message "$chat_id" "$MSG_BOT_CT_STOP_USAGE"
                 return
             fi
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is offline."
+                send_message "$chat_id" "$MSG_BOT_CT_STOP_HOST_OFFLINE"
                 return
             fi
             
-            send_message "$chat_id" "🛑 Stopping guest node $arg1..."
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_STOPPING")"
             local stop_out
             if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
                 stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
             elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
                 stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
             else
-                send_message "$chat_id" "❌ Guest ID $arg1 not found on Proxmox."
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_NOT_FOUND")"
                 return
             fi
             
-            send_message "$chat_id" "✅ Node stop response:
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_SUCCESS")
 \`\`\`
 ${stop_out:-Stop signal dispatched}
 \`\`\`"
@@ -219,34 +215,34 @@ ${stop_out:-Stop signal dispatched}
             
         /ct_restart)
             if [ -z "$arg1" ]; then
-                send_message "$chat_id" "⚠️ Usage: \`/ct_restart <vmid>\`"
+                send_message "$chat_id" "$MSG_BOT_CT_RESTART_USAGE"
                 return
             fi
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "😴 Host is offline."
+                send_message "$chat_id" "$MSG_BOT_CT_RESTART_HOST_OFFLINE"
                 return
             fi
             
-            send_message "$chat_id" "🔄 Restarting guest node $arg1..."
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_RESTARTING")"
             local res_out
             if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
                 res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
             elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
                 res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
             else
-                send_message "$chat_id" "❌ Guest ID $arg1 not found on Proxmox."
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_NOT_FOUND")"
                 return
             fi
             
-            send_message "$chat_id" "✅ Node restart response:
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
 \`\`\`
 ${res_out:-Restart signal dispatched}
 \`\`\`"
             ;;
             
         *)
-            send_message "$chat_id" "❓ Unknown command. Send \`/help\` to see available commands."
+            send_message "$chat_id" "$MSG_BOT_UNKNOWN_COMMAND"
             ;;
     esac
 }
@@ -299,7 +295,7 @@ while true; do
             
             if [ $AUTHORIZED -eq 0 ]; then
                 echo "Blocked unauthorized user ID: $USER_ID attempting command: $CMD_TEXT"
-                send_message "$CHAT_ID" "⚠️ *Unauthorized Access:* Your Telegram User ID ($USER_ID) is not authorized."
+                send_message "$CHAT_ID" "$(expand_msg "$MSG_BOT_UNAUTHORIZED")"
             else
                 echo "Running command: $CMD_TEXT from authorized User ID: $USER_ID"
                 process_command "$CMD_TEXT" "$CHAT_ID"
