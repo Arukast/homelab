@@ -109,6 +109,7 @@ process_command() {
             fi
             
             send_message "$chat_id" "$MSG_BOT_SLEEP_TRIGGERED"
+            echo "SLEEP" > /tmp/homelab_target_state
             # Run the idle monitor script on Proxmox in background with --force so it doesn't block the bot and suspends immediately
             $SSH_CMD "nohup /usr/local/bin/proxmox_idle_monitor.sh --force >/dev/null 2>&1 &" 2>/dev/null
             send_message "$chat_id" "$MSG_BOT_SLEEP_EXECUTED"
@@ -120,6 +121,7 @@ process_command() {
                 return
             fi
             send_message "$chat_id" "$MSG_BOT_SHUTDOWN_SENDING"
+            echo "SHUTDOWN" > /tmp/homelab_target_state
             $SSH_CMD "shutdown -h now" 2>/dev/null &
             send_message "$chat_id" "$MSG_BOT_SHUTDOWN_EXECUTED"
             ;;
@@ -130,6 +132,7 @@ process_command() {
                 return
             fi
             send_message "$chat_id" "$MSG_BOT_REBOOT_SENDING"
+            echo "REBOOT" > /tmp/homelab_target_state
             $SSH_CMD "reboot" 2>/dev/null &
             send_message "$chat_id" "$MSG_BOT_REBOOT_EXECUTED"
             ;;
