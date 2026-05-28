@@ -52,7 +52,7 @@ process_command() {
     local chat_id="$2"
     
     # Extract action and arguments
-    local action=$(echo "$cmd" | awk '{print $1}')
+    local action=$(echo "$cmd" | awk '{print $1}' | tr 'A-Z' 'a-z')
     local arg1=$(echo "$cmd" | awk '{print $2}')
     
     case "$action" in
@@ -115,7 +115,7 @@ process_command() {
             send_message "$chat_id" "$MSG_BOT_SLEEP_EXECUTED"
             ;;
             
-        /host_shutdown)
+        /hostshutdown)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
                 send_message "$chat_id" "$MSG_BOT_SHUTDOWN_ALREADY_OFFLINE"
                 return
@@ -126,7 +126,7 @@ process_command() {
             send_message "$chat_id" "$MSG_BOT_SHUTDOWN_EXECUTED"
             ;;
             
-        /host_reboot)
+        /hostreboot)
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
                 send_message "$chat_id" "$MSG_BOT_REBOOT_ALREADY_OFFLINE"
                 return
@@ -159,7 +159,7 @@ ${vms}"
             send_message "$chat_id" "$list_msg"
             ;;
             
-        /ct_start)
+        /ctstart)
             if [ -z "$arg1" ]; then
                 send_message "$chat_id" "$MSG_BOT_CT_START_USAGE"
                 return
@@ -188,7 +188,7 @@ ${start_out:-Started successfully}
 \`\`\`"
             ;;
             
-        /ct_stop)
+        /ctstop)
             if [ -z "$arg1" ]; then
                 send_message "$chat_id" "$MSG_BOT_CT_STOP_USAGE"
                 return
@@ -216,7 +216,7 @@ ${stop_out:-Stop signal dispatched}
 \`\`\`"
             ;;
             
-        /ct_restart)
+        /ctrestart)
             if [ -z "$arg1" ]; then
                 send_message "$chat_id" "$MSG_BOT_CT_RESTART_USAGE"
                 return
