@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# OpenWrt Waking Server CGI Status Endpoint
+# OpenWrt Waking Server CGI Status Endpoint (Upgraded & Secure)
 # File: /www_waking/cgi-bin/status
 # =============================================================================
 
@@ -23,27 +23,50 @@ if [ -f "$MSG_CONF" ]; then
     . "$MSG_CONF"
 fi
 
-# Telegram notification helper (runs in background to keep HTTP fast)
-notify_telegram() {
-    local text="$1"
-    if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-        local target_chat="${NOTIFY_CHAT_ID}"
-        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-        
-        if [ -n "$target_chat" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${target_chat}" \
-                --data-urlencode "text=${text}" \
-                --data-urlencode "parse_mode=Markdown" >/dev/null &
-        fi
-    fi
+# Set default values if not defined
+[ -z "$PRIVATE_SUBNETS" ] && PRIVATE_SUBNETS="192.168.11.0/24,100.64.0.0/10,127.0.0.1/32"
+[ -z "$ENABLE_PORT_WAKE_LISTENERS" ] && ENABLE_PORT_WAKE_LISTENERS="0"
+
+# --- Native IP CIDR Subnet Match Helpers ---
+ip_to_int() {
+    local o1 o2 o3 o4
+    IFS=. read -r o1 o2 o3 o4 <<EOF
+$1
+EOF
+    echo "$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))"
 }
 
+ip_in_subnet() {
+    local ip="$1"
+    local subnet="$2"
+    local sub_ip=$(echo "$subnet" | cut -d'/' -f1)
+    local mask=$(echo "$subnet" | cut -d'/' -f2 -s)
+    [ -z "$mask" ] && mask=32
+    
+    local ip_int=$(ip_to_int "$ip")
+    local sub_int=$(ip_to_int "$sub_ip")
+    
+    # Avoid bitwise shift error by 32 in standard shell
+    local mask_int=0
+    if [ "$mask" -eq 0 ]; then
+        mask_int=0
+    else
+        mask_int=$(( 0xFFFFFFFF << (32 - mask) ))
+    fi
+    
+    local result=$(( (ip_int & mask_int) == (sub_int & mask_int) ))
+    return $(( ! result ))
+}
 
-# Parse query string parameters (vmid, service, name, code, and trigger)
-VMID=$(echo "$QUERY_STRING" | grep -oE "(vmid|service|name)=[^&]+" | cut -d'=' -f2 2>/dev/null | tr 'A-Z' 'a-z')
-CODE_RAW=$(echo "$QUERY_STRING" | grep -oE "code=[^&]+" | cut -d'=' -f2 2>/dev/null)
-TRIGGER=$(echo "$QUERY_STRING" | grep -oE "trigger=[^&]+" | cut -d'=' -f2 2>/dev/null)
+REAL_PEER_IP="${REMOTE_ADDR:-127.0.0.1}"
+is_private_network() {
+    for range in $(echo "$PRIVATE_SUBNETS" | tr ',' ' '); do
+        if ip_in_subnet "$REAL_PEER_IP" "$range"; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 # Robust Busybox-native URL decoder using AWK
 url_decode() {
@@ -66,7 +89,109 @@ url_decode() {
     }'
 }
 
+# Helper to escape values for safe JSON transmission
+escape_json() {
+    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Extract true Client IP (handles proxies like Tailscale Funnel)
+CLIENT_IP="${REMOTE_ADDR:-127.0.0.1}"
+if [ -n "$HTTP_X_FORWARDED_FOR" ]; then
+    CLIENT_IP=$(echo "$HTTP_X_FORWARDED_FOR" | cut -d',' -f1 | tr -d ' ')
+elif [ -n "$HTTP_X_REAL_IP" ]; then
+    CLIENT_IP="$HTTP_X_REAL_IP"
+fi
+
+# Parse query string parameters (vmid, service, name, code, portal_code, and trigger)
+VMID_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -iE "^(vmid|service|name)=" | cut -d'=' -f2- 2>/dev/null)
+VMID=$(url_decode "$VMID_RAW" | tr 'A-Z' 'a-z')
+CODE_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^code=" | cut -d'=' -f2- 2>/dev/null)
+PORTAL_CODE_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^portal_code=" | cut -d'=' -f2- 2>/dev/null)
+TRIGGER=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^trigger=" | cut -d'=' -f2- 2>/dev/null)
+
 CODE=$(url_decode "$CODE_RAW")
+PORTAL_CODE=$(url_decode "$PORTAL_CODE_RAW")
+
+# --- DDoS Guard & Rate Limiter ---
+RATE_DIR="/tmp/status_rate_limit"
+mkdir -p "$RATE_DIR"
+# Safe file name from IP
+IP_FILE="${RATE_DIR}/$(echo "$CLIENT_IP" | tr -cd 'a-zA-Z0-9.')"
+
+CURRENT_TIME=$(date +%s)
+LAST_REQ=0
+if [ -f "$IP_FILE" ]; then
+    LAST_REQ=$(cat "$IP_FILE")
+fi
+
+# Check if we should bypass the DDoS Guard rate limit
+BYPASS_RATE_LIMIT=0
+if [ "$TRIGGER" = "1" ] || [ -n "$CODE_RAW" ] || [ -n "$PORTAL_CODE_RAW" ]; then
+    # Bypass for active user interactions (entering codes or waking up)
+    BYPASS_RATE_LIMIT=1
+fi
+if is_private_network; then
+    # Bypass completely for local private network users
+    BYPASS_RATE_LIMIT=1
+fi
+
+if [ "$BYPASS_RATE_LIMIT" -eq 0 ]; then
+    # Enforce 3 seconds cooldown between status queries for untrusted scrapers
+    ELAPSED_REQ=$((CURRENT_TIME - LAST_REQ))
+    if [ "$ELAPSED_REQ" -lt 3 ]; then
+        echo '{"status": "blocked", "message": "DDoS Guard: Too many requests. Please wait."}'
+        exit 0
+    fi
+fi
+echo "$CURRENT_TIME" > "$IP_FILE"
+
+# --- Telegram Notification Helper (Async) ---
+notify_telegram() {
+    local text="$1"
+    if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
+        local target_chat="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        
+        if [ -n "$target_chat" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${target_chat}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "parse_mode=Markdown" >/dev/null &
+        fi
+    fi
+}
+
+# --- Discord Notification Helper (Async) ---
+notify_discord() {
+    local text="$1"
+    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+        local color=3899126 # Default Cyber Blue
+        if echo "$text" | grep -iqE "awake|online|restored|success"; then
+            color=1095905 # Green
+        elif echo "$text" | grep -iqE "sleep|S3|offline|down|shutdown"; then
+            color=15680580 # Red
+        fi
+        local clean_txt=$(echo "$text" | sed 's/"/\\"/g')
+        local payload="{\"embeds\":[{\"title\":\"🔔 Homelab Portal Notification\",\"description\":\"${clean_txt}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
+        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null &
+    fi
+}
+
+# --- Rate-Limit / Global WoL Cooldown Lock ---
+enforce_wol_cooldown() {
+    local lock_file="/tmp/wol_cooldown_lock"
+    local cooldown=60
+    if [ -f "$lock_file" ]; then
+        local last_wol=$(cat "$lock_file")
+        local diff=$((CURRENT_TIME - last_wol))
+        if [ "$diff" -lt "$cooldown" ]; then
+            local remain=$((cooldown - diff))
+            echo "{\"status\": \"cooldown\", \"message\": \"WoL cooldown active. Please wait ${remain}s before retrying.\"}"
+            exit 0
+        fi
+    fi
+    echo "$CURRENT_TIME" > "$lock_file"
+}
 
 # Translate friendly name to numeric VMID using GUEST_NAME_MAP if non-numeric
 if [ -n "$VMID" ] && ! echo "$VMID" | grep -qE "^[0-9]+$"; then
@@ -83,172 +208,264 @@ if [ -n "$VMID" ] && ! echo "$VMID" | grep -qE "^[0-9]+$"; then
     fi
 fi
 
-# If VMID is provided, run in Multi-Tenant Guest Waking mode
-if [ -n "$VMID" ]; then
-    # 1. Look up friendly name and passcode
-    GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
-    [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
-    
-    TARGET_PASSCODE=$(echo "$GUEST_PASSCODE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
-    [ -z "$TARGET_PASSCODE" ] && TARGET_PASSCODE="$WAKE_PASSCODE"
+# --- Portal Gatekeeper Authenticator ---
+IS_FUNNEL_REQUEST=0
+# If the request comes through Tailscale Funnel, it is SNI-proxied from the public internet (port 443/80),
+# meaning uhttpd receives it with a Host header that does NOT contain the direct local ports (:8080 or :8443).
+if ! echo "$HTTP_HOST" | grep -qE "(:8080|:8443)"; then
+    IS_FUNNEL_REQUEST=1
+fi
 
-    GUEST_MESSAGE=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2- 2>/dev/null)
-    
-    # Extract guest IP from the main guest map
-    GUEST_IP=$(echo "$GUEST_ORCHESTRATION_MAP" | grep -oE "${VMID}:[^:]+" | cut -d':' -f2 2>/dev/null)
-    
-    # 2. Check if the Guest IP is online
-    GUEST_ONLINE=0
-    if [ -n "$GUEST_IP" ]; then
-        if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
-            GUEST_ONLINE=1
-        fi
-    fi
-    
-    # 3. If no code was submitted, just return the status, the name, and resolved VMID
-    if [ -z "$CODE" ]; then
-        if [ "$GUEST_ONLINE" -eq 1 ]; then
-            echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
-        else
-            echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
-        fi
-        exit 0
-    fi
-    
-    # 4. If code is submitted, verify it
-    if [ "$CODE" != "$TARGET_PASSCODE" ]; then
-        echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\"}"
-        exit 0
-    fi
-    
-    # 5. If already online, just return status and skip waking
-    if [ "$GUEST_ONLINE" -eq 1 ]; then
-        echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
-        exit 0
-    fi
+USER_IS_PRIVATE=0
+if [ "$IS_FUNNEL_REQUEST" -eq 0 ] && is_private_network; then
+    USER_IS_PRIVATE=1
+fi
 
-    # 6. Correct passcode and guest is offline! Trigger Wake sequence
-    # Wake the Proxmox host if it is down
-    if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-        if [ "$TRIGGER" = "1" ]; then
-            notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
-        fi
-        etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
-    else
-        if [ "$TRIGGER" = "1" ]; then
-            notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
-        fi
+PORTAL_LOCKED=0
+REQUIRED_PORTAL_CODE=""
+if [ "$USER_IS_PRIVATE" -eq 1 ]; then
+    REQUIRED_PORTAL_CODE="$PORTAL_PRIVATE_PASSCODE"
+else
+    REQUIRED_PORTAL_CODE="$PORTAL_FUNNEL_PASSCODE"
+fi
+
+if [ -n "$REQUIRED_PORTAL_CODE" ]; then
+    if [ "$PORTAL_CODE" != "$REQUIRED_PORTAL_CODE" ]; then
+        PORTAL_LOCKED=1
     fi
-    
-    SSH_KEY_PATH="/etc/dropbear/id_dropbear"
-    SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
-    
-    # Run the guest resume in background to avoid blocking the HTTP response
-    (
-        # Wait for host to be pingable
-        while true; do
-            if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 2
-        done
-        
-        $SSH_CMD "if pct config $VMID >/dev/null 2>&1; then 
-                    pct resume $VMID >/dev/null 2>&1 || pct start $VMID >/dev/null 2>&1
-                  elif qm config $VMID >/dev/null 2>&1; then 
-                    qm resume $VMID >/dev/null 2>&1 || qm start $VMID >/dev/null 2>&1
-                  fi" >/dev/null 2>&1
-                  
-        # Notify when awake
-        if [ "$TRIGGER" = "1" ] && [ -n "$GUEST_IP" ]; then
-            max_retries=60
-            while [ $max_retries -gt 0 ]; do
-                if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
-                    notify_telegram "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
-                    break
-                fi
-                sleep 5
-                max_retries=$((max_retries - 1))
-            done
-        fi
-    ) &
-    
-    if [ "$GUEST_ONLINE" -eq 1 ]; then
-        echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
-    else
-        echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME\", \"vmid\": \"$VMID\", \"message\": \"$GUEST_MESSAGE\"}"
-    fi
+fi
+
+if [ "$PORTAL_LOCKED" -eq 1 ]; then
+    echo "{\"status\": \"portal_locked\", \"is_private\": ${USER_IS_PRIVATE}}"
     exit 0
 fi
 
-# --- GLOBAL HOST WAKING MODE (Default if no VMID provided) ---
-# 1. Check if the target host is responsive (ping or port probe)
-ONLINE=0
-if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-    ONLINE=1
-else
-    for port in 8006 80 8123; do
-        if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
-            ONLINE=1
-            break
+# --- General Host check helper ---
+is_host_online() {
+    if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        return 0
+    fi
+    for p in 8006 80 8123 22; do
+        if nc -w 1 -z "$HOST_IP" "$p" >/dev/null 2>&1; then
+            return 0
         fi
     done
-fi
+    return 1
+}
 
-# 2. If no code was submitted, just return the status and the name
-if [ -z "$CODE" ]; then
-    if [ "$ONLINE" -eq 1 ]; then
-        echo '{"status": "online", "name": "Homelab"}'
-    else
-        echo '{"status": "sleeping", "name": "Homelab"}'
+# =============================================================================
+# MULTI-TENANT DIRECTORY DASHBOARD MODE (No specific VMID requested)
+# =============================================================================
+if [ -z "$VMID" ]; then
+    HOST_STATUS="sleeping"
+    if is_host_online; then
+        HOST_STATUS="online"
     fi
+    
+    # Parse guest_codes (Format: vmid:code,vmid:code)
+    GUEST_CODES_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^guest_codes=" | cut -d'=' -f2- 2>/dev/null)
+    GUEST_CODES=$(url_decode "$GUEST_CODES_RAW")
+    
+    echo "{"
+    echo "  \"status\": \"online\","
+    echo "  \"is_private\": ${USER_IS_PRIVATE},"
+    echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\"},"
+    echo "  \"guests\": ["
+    
+    # Loop through configured guest map
+    first=1
+    for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
+        g_vmid=$(echo "$entry" | cut -d':' -f1)
+        g_ip=$(echo "$entry" | cut -d':' -f2)
+        
+        # Privacy filter
+        g_privacy=$(echo "$GUEST_PRIVACY_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
+        [ -z "$g_privacy" ] && g_privacy="private" # Default to private-only
+        
+        if [ "$USER_IS_PRIVATE" -eq 0 ] && [ "$g_privacy" != "public" ]; then
+            # Friends cannot see private guests
+            continue
+        fi
+        
+        g_name=$(echo "$GUEST_NAME_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
+        [ -z "$g_name" ] && g_name="Guest ${g_vmid}"
+        g_name_escaped=$(escape_json "$g_name")
+        
+        g_online=0
+        if [ "$HOST_STATUS" = "online" ] && ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
+            g_online=1
+        fi
+        
+        g_passcode=$(echo "$GUEST_PASSCODE_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
+        g_passcode_req="true"
+        [ -z "$g_passcode" ] && g_passcode_req="false"
+        
+        # Extract guest code sent by client
+        g_client_code=$(echo "$GUEST_CODES" | tr ',' '\n' | grep -E "^${g_vmid}:" | cut -d':' -f2- 2>/dev/null)
+        
+        g_verified=0
+        if [ "$g_passcode_req" = "false" ] || [ "$USER_IS_PRIVATE" -eq 1 ]; then
+            g_verified=1
+        elif [ -n "$g_client_code" ] && [ "$g_client_code" = "$g_passcode" ]; then
+            g_verified=1
+        fi
+        
+        g_msg=""
+        if [ "$g_verified" -eq 1 ]; then
+            g_msg=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2- 2>/dev/null)
+        fi
+        g_msg_escaped=$(escape_json "$g_msg")
+        
+        if [ "$first" -eq 0 ]; then
+            echo ","
+        fi
+        first=0
+        
+        g_status="sleeping"
+        if [ "$g_online" -eq 1 ]; then
+            g_status="online"
+        elif [ -f "/tmp/waking_vmid_${g_vmid}" ]; then
+            WAKE_TIME=$(cat "/tmp/waking_vmid_${g_vmid}")
+            if [ $((CURRENT_TIME - WAKE_TIME)) -lt 90 ]; then
+                g_status="waking"
+            else
+                rm -f "/tmp/waking_vmid_${g_vmid}"
+            fi
+        fi
+        
+        echo -n "    {\"vmid\": \"${g_vmid}\", \"name\": \"${g_name_escaped}\", \"status\": \"${g_status}\", \"passcode_required\": ${g_passcode_req}, \"message\": \"${g_msg_escaped}\"}"
+    done
+    
+    echo ""
+    echo "  ]"
+    echo "}"
     exit 0
 fi
 
-# 3. Security Check: Passcode Verification (If WAKE_PASSCODE is set and code is submitted)
-if [ -n "$WAKE_PASSCODE" ]; then
-    if [ "$CODE" != "$WAKE_PASSCODE" ]; then
-        echo '{"status": "unauthorized", "message": "Invalid passcode", "name": "Homelab"}'
-        exit 0
+# =============================================================================
+# SINGLE GUEST WAKING MODE
+# =============================================================================
+GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+[ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
+GUEST_NAME_ESCAPED=$(escape_json "$GUEST_NAME")
+
+TARGET_PASSCODE=$(echo "$GUEST_PASSCODE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+PASSCODE_REQUIRED="true"
+[ -z "$TARGET_PASSCODE" ] && PASSCODE_REQUIRED="false"
+
+GUEST_MESSAGE=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2- 2>/dev/null)
+GUEST_MESSAGE_ESCAPED=$(escape_json "$GUEST_MESSAGE")
+GUEST_IP=$(echo "$GUEST_ORCHESTRATION_MAP" | grep -oE "${VMID}:[^:]+" | cut -d':' -f2 2>/dev/null)
+
+GUEST_ONLINE=0
+if is_host_online && [ -n "$GUEST_IP" ]; then
+    if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
+        GUEST_ONLINE=1
     fi
 fi
 
-# 4. Correct passcode! Trigger Wake-on-LAN and send notification (Only once on trigger=1)
-if [ "$ONLINE" -eq 0 ]; then
-    if [ "$TRIGGER" = "1" ]; then
-        notify_telegram "$MSG_WEB_WAKE_HOST"
-        
-        # Monitor and notify when awake
-        (
-            max_retries=60
-            while [ $max_retries -gt 0 ]; do
-                HOST_IS_UP=0
-                if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                    HOST_IS_UP=1
-                else
-                    for port in 8006 80 8123; do
-                        if nc -w 1 -z "$HOST_IP" "$port" >/dev/null 2>&1; then
-                            HOST_IS_UP=1
-                            break
-                        fi
-                    done
-                fi
-                
-                if [ "$HOST_IS_UP" -eq 1 ]; then
-                    notify_telegram "$MSG_WEB_HOST_AWAKE"
-                    break
-                fi
-                sleep 5
-                max_retries=$((max_retries - 1))
-            done
-        ) &
-    fi
-    etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+# 1. Passcode Lock Check
+PASS_VERIFIED=0
+if [ "$PASSCODE_REQUIRED" = "false" ] || [ "$USER_IS_PRIVATE" -eq 1 ]; then
+    # Bypass passcode if none configured or if user is on private network
+    PASS_VERIFIED=1
+elif [ -n "$CODE" ] && [ "$CODE" = "$TARGET_PASSCODE" ]; then
+    PASS_VERIFIED=1
 fi
 
-if [ "$ONLINE" -eq 1 ]; then
-    echo '{"status": "online", "name": "Homelab"}'
+if [ "$PASS_VERIFIED" -eq 0 ] && [ -n "$CODE" ]; then
+    # Incorrect passcode submitted
+    echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true}"
+    exit 0
+fi
+
+# Check if boot sequence is actively in progress
+GUEST_WAKING=0
+if [ -f "/tmp/waking_vmid_${VMID}" ]; then
+    WAKE_TIME=$(cat "/tmp/waking_vmid_${VMID}")
+    if [ $((CURRENT_TIME - WAKE_TIME)) -lt 90 ]; then
+        GUEST_WAKING=1
+    else
+        rm -f "/tmp/waking_vmid_${VMID}"
+    fi
+fi
+
+# 2. Return Status and only return sensitive messages if verified
+if [ "$PASS_VERIFIED" -eq 0 ]; then
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"passcode_verified\": false, \"message\": \"\"}"
+    exit 0
+fi
+
+# 3. Code verified! Return status and handle wake triggers
+if [ "$GUEST_ONLINE" -eq 1 ]; then
+    rm -f "/tmp/waking_vmid_${VMID}"
+    echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\"}"
+    exit 0
+fi
+
+# If actively waking and trigger not requested (or already triggered), bypass execution
+if [ "$GUEST_WAKING" -eq 1 ]; then
+    echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\"}"
+    exit 0
+fi
+
+# 4. Guest is offline (sleeping). If trigger=1 is not requested, return sleeping but with verified details
+if [ "$TRIGGER" != "1" ]; then
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\"}"
+    exit 0
+fi
+
+# 5. Guest is offline and trigger=1 requested: Wake it up!
+enforce_wol_cooldown
+
+# Mark as waking
+echo "$CURRENT_TIME" > "/tmp/waking_vmid_${VMID}"
+
+# Log notifications
+if ! is_host_online; then
+    notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
+    notify_discord "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
 else
-    echo '{"status": "waking", "name": "Homelab"}'
+    notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
+    notify_discord "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
 fi
+
+# WOL Host
+etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+
+# Asynchronous Guest Resume Loop
+SSH_KEY_PATH="/etc/dropbear/id_dropbear"
+SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+
+(
+    while true; do
+        if is_host_online; then
+            break
+        fi
+        sleep 2
+    done
+    
+    $SSH_CMD "if pct config $VMID >/dev/null 2>&1; then 
+                pct resume $VMID >/dev/null 2>&1 || pct start $VMID >/dev/null 2>&1
+              elif qm config $VMID >/dev/null 2>&1; then 
+                qm resume $VMID >/dev/null 2>&1 || qm start $VMID >/dev/null 2>&1
+              fi" >/dev/null 2>&1
+              
+    if [ -n "$GUEST_IP" ]; then
+        max_retries=60
+        while [ $max_retries -gt 0 ]; do
+            if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
+                rm -f "/tmp/waking_vmid_${VMID}"
+                notify_telegram "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
+                notify_discord "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
+                break
+            fi
+            sleep 5
+            max_retries=$((max_retries - 1))
+        done
+    fi
+    rm -f "/tmp/waking_vmid_${VMID}"
+) >/dev/null 2>&1 </dev/null &
+
+echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\"}"
 exit 0

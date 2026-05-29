@@ -195,23 +195,45 @@ If you want to run multiple heavy services but dynamically reclaim their memory 
 
 ---
 
-## 🎨 Phase 5: Generic Dynamic Waking Pages & Isolated Passcodes
+---
 
-The Waking Web Landing Page is **100% self-configuring**. When you configure a guest name and dynamic passcode in `/etc/homelab_power.conf` on the router, the landing page will automatically customize its titles, descriptions, buttons, password placeholders, and browser `localStorage` storage keys to that service!
+## 🎨 Phase 5: Unified Glassmorphic Portal Dashboard & Optional Passcodes
 
-1. **Configure Guest Name and Passcode Maps** in `/etc/homelab_power.conf`:
-   ```ini
-   # Mappings of Guest VMIDs to their specific friendly names and access passcodes
-   GUEST_NAME_MAP="120:Minecraft,122:Unturned,125:Valheim"
-   GUEST_PASSCODE_MAP="120:mcpass,122:unturnedpass,125:valheimpass"
-   ```
-2. **Access Dedicated Pages**:
-   You can direct players or family members directly to clean, tailored URLs using the service name or VMID:
-   - **Minecraft**: `http://ZulvaNet.ts.net/?service=minecraft` (or `?vmid=120`)
-   - **Valheim**: `http://ZulvaNet.ts.net/?service=valheim` (or `?vmid=125`)
-3. **Behavior**:
-   - The page dynamically fetches details from the router, renders *"Minecraft Verification"* (or *"Valheim Verification"*), and displays customized instructions and buttons.
-   - Verified passcodes are saved in `localStorage` under service-specific keys (e.g. `wake_code_120`), ensuring different services' passwords never overwrite or conflict with each other!
+The landing page features a **dual-mode engine** that adapts dynamically depending on how it is accessed:
+
+### A. Unified Directory Mode (No parameters, e.g. `http://your-router.ts.net:8080/`)
+When accessed without any query string, it serves a gorgeous, unified glassmorphic portal of all authorized guest servers.
+* **Portal-Level Gatekeeper**: Secures your dashboard from unauthorized eyes. Configure `PORTAL_FUNNEL_PASSCODE` (for friends/public access) and `PORTAL_PRIVATE_PASSCODE` (for private/LAN access) in `/etc/homelab_power.conf` to lock the portal.
+* **Interactive Live Grid**: Displays status cards (ONLINE, SLEEPING, or WAKING) for every guest.
+* **Instant Search/Filter**: A smooth, interactive input bar to filter cards in real-time.
+* **One-Click Secure Wakes**: Click "Wake" to boot any guest. If a passcode is configured in `GUEST_PASSCODE_MAP`, it opens a passcode verification modal. If no passcode is configured, it **bypasses verification entirely** and boots instantly!
+* **Auto-Redirect Web UIs**: For web interfaces (like NAS or Home Assistant), the portal will automatically redirect the user's browser tab to their web interface as soon as the service finishes booting!
+
+### B. Single-Service Mode (Tailored URL, e.g. `http://your-router.ts.net:8080/?service=minecraft`)
+Perfect for directing friends directly to a single game server without exposing other homelab details.
+* Customizes titles and instructions dynamically.
+* Verified passcodes are saved in `localStorage` under service-specific isolated keys (e.g. `wake_code_120`), ensuring they never conflict.
+
+---
+
+## 🔒 Advanced Security, Privacy & Anti-DDoS
+
+### 1. Privacy Isolation (Private vs. Public)
+Hide sensitive private UIs (like your Home Assistant or NAS) from gaming friends!
+* Define your trusted LAN/Tailscale subnets in `PRIVATE_SUBNETS="192.168.11.0/24,100.64.0.0/10"`.
+* Mapped VMIDs in `GUEST_PRIVACY_MAP="120:public,121:private"` are evaluated against the client's source IP (`$REMOTE_ADDR`).
+* Trusted IPs see **all services**; external visitors (friends/public funnel) see **only public services** (private ones are completely hidden from the grid).
+* Message descriptions and passwords (from `GUEST_MESSAGE_MAP`) are strictly omitted from JSON payloads until the correct passcode is successfully entered.
+
+### 2. Native DDoS Guard & Cooldown Block
+Exposing status queries to the public via Tailscale Funnel poses trigger spam risks. The router implements a dual-layer defender:
+* **IP Rate Limiting**: Client IP requests are tracked in RAM-based filesystem `/tmp/status_rate_limit/`. If a client spams the status queries (exceeding 1 query per 3 seconds), they are instantly blocked with a lightweight JSON warning.
+* **WoL Cooldown Lock**: A global `/tmp/wol_cooldown_lock` enforces a **60-second cooldown** between Wake-on-LAN and guest start SSH dispatches, completely blocking spam at the core and safeguarding your hardware.
+
+### 3. UDP Connection Tracking on Proxmox
+Monitored ports now support protocol suffixes (e.g. `MONITORED_PORTS="22,25565/tcp,19132/udp"`). The idle script queries kernel `conntrack` (with native `ss` fallback) to monitor active UDP gaming streams (like Minecraft Bedrock, Valheim, or Unturned), preventing premature host suspension during live sessions.
+
+---
 
 ---
 
@@ -227,40 +249,48 @@ If the host successfully sleeps and resumes keyboard, network, and disk states a
 
 ### 🤖 Telegram Bot Control & Commands
 
-Once active, search for your bot in Telegram and start interaction. 
+Once active, search for your bot in Telegram and start interacting.
 
 #### Available Commands:
 * **⚡ Host Power Control**:
   * `/status` - Check host power (ONLINE/OFFLINE), PVE resource status (CPU Load, RAM Usage), and guest counts.
   * `/wake` - Forcefully wake the Proxmox host using Wake-on-LAN (Magic Packet).
-  * `/sleep` - Safely suspend guest nodes and sleep the host.
-    > [!IMPORTANT]
-    > **Manual vs. Automated Sleep Design:**
-    > * **Automated (Idle Checks):** The background cron job running on Proxmox evaluates `proxmox_idle_monitor.sh` continuously. It **will block** sleep if an orchestrated container is in its 15-minute countdown, if CPU/network activity is high, or if you have open active SSH sessions (port 22) or Web UI sessions (port 8006).
-    > * **Manual (Force Override):** Typing `/sleep` in Telegram triggers the command on Proxmox using a `--force` override. This **bypasses all idle, network, and SSH block rules**, immediately suspending/stopping all running containers and putting the host to sleep.
-  * `/host_shutdown` - Gracefully shutdown the Proxmox host completely.
-  * `/host_reboot` - Reboot the Proxmox host.
+  * `/sleep` - Safely suspend guest nodes and sleep the host (checks for idle criteria).
+  * `/sleepforce` - Immediately suspend guest nodes and sleep the host (bypasses idle criteria).
+  * `/hostshutdown` - Safely shutdown the Proxmox host completely (blocks if non-exempt guests are running).
+  * `/hostshutdownforce` - Immediately stop/suspend guest nodes and shut down the host.
+  * `/hostreboot` - Safely reboot the Proxmox host (blocks if non-exempt guests are running).
+  * `/hostrebootforce` - Immediately stop/suspend guest nodes and reboot the host.
 * **🖥️ Guest Node Control**:
   * `/list` - List all LXC containers and QEMU VMs with their status (running/stopped).
-  * `/ct_start <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
-  * `/ct_stop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
-  * `/ct_restart <vmid>` - Restarts the specific VM or container.
+  * `/ctstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
+  * `/ctstop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
+  * `/ctrestart <vmid>` - Restarts the specific VM or container.
+
+> [!IMPORTANT]
+> **Manual vs. Automated Sleep/Shutdown Design:**
+> * **Automated (Idle Checks):** The background cron job running on Proxmox evaluates `proxmox_idle_monitor.sh` continuously. It **will block** sleep if an orchestrated container is in its countdown, if CPU/network activity is high, or if you have open active SSH sessions (port 22) or Web UI sessions (port 8006).
+> * **Manual Safe Actions:** `/sleep`, `/hostshutdown`, and `/hostreboot` verify safety criteria (such as blocking if active non-exempt guest nodes are running) before triggering.
+> * **Manual Forced Actions:** Commands ending in `force` (like `/sleepforce`, `/hostshutdownforce`, `/hostrebootforce`) **bypass all safety/idle criteria** to immediately suspends/stop guests and trigger the power state changes.
 
 #### ⚙️ Registering Commands with BotFather:
-To enable auto-completion menu for commands in Telegram:
+To enable the auto-completion menu for commands in Telegram:
 1. Message **[@BotFather](https://t.me/BotFather)** on Telegram.
 2. Send `/setcommands` and choose your Homelab Bot.
 3. Paste the following block exactly:
    ```text
    status - Check host power and PVE resource status
    wake - Wake the Proxmox host (Wake-on-LAN)
-   sleep - Safely suspend guest nodes and sleep host
-   host_shutdown - Gracefully shutdown the Proxmox host
-   host_reboot - Reboot the Proxmox host
+   sleep - Safely sleep host (respects idle rules)
+   sleepforce - Force host to sleep immediately
+   hostshutdown - Safe graceful shutdown
+   hostshutdownforce - Force shutdown immediately
+   hostreboot - Safe reboot
+   hostrebootforce - Force reboot immediately
    list - List all LXC containers and VMs
-   ct_start - Start a specific VM or container (e.g. /ct_start 101)
-   ct_stop - Stop a specific VM or container (e.g. /ct_stop 101)
-   ct_restart - Restart a specific VM or container (e.g. /ct_restart 101)
+   ctstart - Start a specific VM/container (e.g. /ctstart 101)
+   ctstop - Stop a specific VM/container (e.g. /ctstop 101)
+   ctrestart - Restart a specific VM/container (e.g. /ctrestart 101)
    ```
 
 ---

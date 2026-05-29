@@ -31,17 +31,29 @@ PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
 PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
 [ -z "$PROTO" ] && PROTO="tcp"
 
-# Listen on game port
+# Clean up netcat on signal
+cleanup() {
+    echo "Stopping game wake listener..."
+    [ -n "$NC_PID" ] && kill "$NC_PID" 2>/dev/null
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+# Listen on game port in background
 # nc will block until a player attempts a connection.
 # We set a 2-second timeout (-w 2) to ensure the listener exits quickly after 
 # the player hits the port, allowing the script to wake the host and monitor its boot.
 if [ "$PROTO" = "udp" ]; then
     echo "Starting UDP listener on port $PORT_NUM..."
-    nc -u -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1
+    nc -u -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1 &
 else
     echo "Starting TCP listener on port $PORT_NUM..."
-    nc -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1
+    nc -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1 &
 fi
+NC_PID=$!
+
+# Wait for netcat to intercept a connection
+wait "$NC_PID"
 
 # Player connection detected!
 echo "Player connection detected on port $PORT_RAW. Initiating host wake sequence..."

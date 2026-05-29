@@ -39,23 +39,27 @@ SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
 echo "Binding IP alias $GUEST_IP/32 to br-lan..."
 ip addr add "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
 
-# Clean up rule on signal
+# Clean up rule and netcat on signal
 cleanup() {
-    echo "Cleaning up IP alias $GUEST_IP/32 from br-lan..."
+    echo "Cleaning up IP alias $GUEST_IP/32 and port listeners..."
+    [ -n "$NC_PID" ] && kill "$NC_PID" 2>/dev/null
     ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
     exit 0
 }
 trap cleanup SIGTERM SIGINT
 
-# 2. Intercept incoming connection to the guest port
-# This blocks until a packet arrives
+# 2. Intercept incoming connection to the guest port in background
 if [ "$PROTO" = "udp" ]; then
     echo "Listening on UDP ${GUEST_IP}:${PORT_NUM}..."
-    nc -u -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1
+    nc -u -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1 &
 else
     echo "Listening on TCP ${GUEST_IP}:${PORT_NUM}..."
-    nc -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1
+    nc -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1 &
 fi
+NC_PID=$!
+
+# Wait for netcat to intercept a packet or timeout
+wait "$NC_PID"
 
 # 3. Connection intercepted! Remove IP alias instantly to restore native routing
 echo "Connection intercepted! Restoring native routing..."

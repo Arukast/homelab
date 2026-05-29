@@ -60,10 +60,42 @@ PING_RETRIES="3"
 # Leave empty if not using individual guest sleep/wake orchestration.
 GUEST_ORCHESTRATION_MAP=""
 
+# --- Safe Shutdown / Reboot Exemptions ---
+# Comma-separated list of VMIDs that represent "always running" core services (e.g. NAS, Nginx, Pihole).
+# These guests will NOT statically block `/hostshutdown` or `/hostreboot` from the Telegram bot.
+# The host will still safely verify that these instances are NOT actively in use (CPU, Network Rate, Ports)
+# on Proxmox before shutting down!
+EXEMPT_SHUTDOWN_GUESTS=""
+
 # --- Waking Web Server Security ---
 # Passcode required on the Glassmorphic waking screen to allow Wake-on-LAN commands.
 # This prevents unauthorized visitors (from public Tailscale Funnel) from waking your homelab.
 WAKE_PASSCODE="YOUR_SECURE_PASSCODE"
+
+# --- Two-Tier Portal Access Passcodes ---
+# Passcode required to unlock and display the main Unified Dashboard itself.
+# Leave PORTAL_PRIVATE_PASSCODE blank to give private network instant passcode-free access inside the LAN/Tailscale.
+PORTAL_FUNNEL_PASSCODE="YOUR_FUNNEL_PORTAL_PASSCODE"
+PORTAL_PRIVATE_PASSCODE=""
+
+# --- Privacy Subnets & Filters ---
+# Subnets that represent your secure private/admin network (LAN and Tailscale range).
+# Clients connecting from outside these ranges (e.g. friends over external links) will have private guests hidden.
+PRIVATE_SUBNETS="192.168.11.0/24,100.64.0.0/10"
+
+# Mappings of Guest VMIDs to their privacy level: 'public' (visible to everyone) or 'private' (visible only to private network).
+GUEST_PRIVACY_MAP="120:private,122:public"
+
+# --- Anti-Accidental Wake Port Listeners ---
+# Enable or disable the raw TCP/UDP port Wake-on-Demand listeners on the router.
+# Set to "0" (Recommended) to prevent background internet port scans or client server list pings from waking guests.
+# If "0", guests are safely woken ONLY via the secure Web Page or Telegram Bot.
+ENABLE_PORT_WAKE_LISTENERS="0"
+
+# --- Discord Webhook Notifications (Optional) ---
+# Generate a webhook URL in your Discord App Channel settings to send rich status embeds.
+# e.g., "https://discord.com/api/webhooks/123456789/abcdefgh"
+DISCORD_WEBHOOK_URL=""
 
 # --- Multi-Tenant Guest Waking Security & Naming Maps ---
 # Mappings of Guest VMIDs to their specific friendly names and access passcodes.
@@ -74,6 +106,8 @@ WAKE_PASSCODE="YOUR_SECURE_PASSCODE"
 # Format: "VMID:VALUE,VMID:VALUE"
 GUEST_NAME_MAP="120:Minecraft,122:Unturned"
 GUEST_PASSCODE_MAP="120:mcpass,122:unturnedpass"
+GUEST_MESSAGE_MAP="120:Welcome to Minecraft!,122:Welcome to Unturned!"
+
 
 
 

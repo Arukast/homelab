@@ -33,11 +33,19 @@ fi
 
 # 1. Install dependencies
 echo -e "${GREEN}[1/5] Checking dependencies...${NC}"
+DEPS=""
 if ! command -v bc >/dev/null 2>&1; then
-    echo "Installing 'bc' utility for floating point load comparisons..."
-    apt-get update -qy && apt-get install -qy bc
+    DEPS="bc"
+fi
+if ! command -v conntrack >/dev/null 2>&1; then
+    DEPS="$DEPS conntrack"
+fi
+
+if [ -n "$DEPS" ]; then
+    echo "Installing missing dependencies:$DEPS..."
+    apt-get update -qy && apt-get install -qy $DEPS
 else
-    echo "'bc' is already installed."
+    echo "All dependencies (bc, conntrack) are already installed."
 fi
 
 # 2. Copy configuration file

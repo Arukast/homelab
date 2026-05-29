@@ -87,7 +87,19 @@ PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
 GUEST_ORCHESTRATION_MAP=""
 
 
+# --- Telegram Notifications for Guest Idle Sleep (Optional) ---
+BOT_TOKEN=""
+ALLOWED_USER_IDS=""
+NOTIFY_CHAT_ID=""
+
+# --- Discord Webhook Notifications (Optional) ---
+DISCORD_WEBHOOK_URL=""
+
+# Map of friendly guest names (Must match OpenWrt config to display names instead of raw IDs)
+GUEST_NAME_MAP="120:Unturned,121:Minecraft"
+
 # --- Logs ---
 LOG_FILE="/var/log/proxmox_power.log"
 ENABLE_SYSLOG=1
+
 

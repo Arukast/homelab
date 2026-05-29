@@ -18,9 +18,21 @@ PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
 LOG_FILE="/var/log/proxmox_power.log"
 ENABLE_SYSLOG=1
 
+# Default fallback messages (if /etc/homelab_messages.conf is not present)
+MSG_PROXMOX_GUEST_SUSPENDED='💤 *Guest Idle Sleep:* Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been successfully suspended to reclaim system resources!'
+MSG_PROXMOX_GUEST_STOPPED='🛑 *Guest Idle Sleep:* Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been stopped cleanly to reclaim system resources!'
+MSG_PROXMOX_HOST_SLEEPING='😴 *Proxmox Host Sleeping:* Host is entering S3 Suspend-to-RAM. All system states successfully saved!'
+MSG_PROXMOX_HOST_AWAKE='⚡ *Proxmox Host Awake:* Host successfully woke up from ACPI S3 sleep. Restoring all guest VMs...'
+
 # Load configuration if exists
 if [ -f "$CONF" ]; then
     source "$CONF"
+fi
+
+# Load messages configuration if exists
+MSG_CONF="/etc/homelab_messages.conf"
+if [ -f "$MSG_CONF" ]; then
+    source "$MSG_CONF"
 fi
 
 # Log helper
@@ -33,19 +45,71 @@ log() {
     echo "$msg"
 }
 
+# Notification helper
+notify() {
+    local msg="$1"
+    log "NOTIFICATION: $msg"
+    
+    # Telegram dispatch
+    if [ -n "$BOT_TOKEN" ] && [ -n "$ALLOWED_USER_IDS" ]; then
+        local target_chat="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        
+        if [ -n "$target_chat" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${target_chat}" \
+                --data-urlencode "text=🔔 *Power Monitor:* $msg" \
+                --data-urlencode "parse_mode=Markdown" >/dev/null &
+        fi
+    fi
+
+    # Discord Webhook dispatch
+    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+        local color=3899126 # Default Cyber Blue
+        if echo "$msg" | grep -iqE "awake|online|restored"; then
+            color=1095905 # Green
+        elif echo "$msg" | grep -iqE "sleep|S3|offline|down|shutdown|suspended|stopped"; then
+            color=15680580 # Red
+        fi
+        
+        local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
+        local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
+        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null &
+    fi
+}
+
 # Ensure log file exists
 touch "$LOG_FILE"
 
 # Parse arguments
 FORCE_SLEEP=0
-if [ "$1" = "--force" ] || [ "$1" = "force" ]; then
-    FORCE_SLEEP=1
+ACTION="suspend"
+
+for arg in "$@"; do
+    case "$arg" in
+        --force|force)
+            FORCE_SLEEP=1
+            ;;
+        --shutdown|shutdown)
+            ACTION="shutdown"
+            ;;
+        --reboot|reboot)
+            ACTION="reboot"
+            ;;
+    esac
+done
+
+# If the target host action is shutdown or reboot, we MUST stop guests rather than S3-suspending to RAM!
+if [ "$ACTION" = "shutdown" ] || [ "$ACTION" = "reboot" ]; then
+    log "Host action is $ACTION. Overriding guest suspension methods to safe stop/shutdown..."
+    LXC_SUSPEND_METHOD="stop"
+    VM_SUSPEND_METHOD="shutdown"
 fi
 
 if [ "$FORCE_SLEEP" -eq 1 ]; then
-    log "=== Manual Force Sleep Triggered ==="
+    log "=== Manual Force Action Triggered: $ACTION ==="
 else
-    log "=== Running Idle Check Cycle ==="
+    log "=== Running Idle Check Cycle for Action: $ACTION ==="
 fi
 
 # Run activity and idle checks only if not forced
@@ -113,21 +177,31 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
                     if [ "$ELAPSED" -ge "$TIMEOUT_SEC" ]; then
                         log "Guest [$VMID] idle timeout reached. Preparing to suspend/stop..."
                         ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING - 1))
+                        
+                        # Resolve friendly name for notifications
+                        GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+                        [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
+                        TIMEOUT_MIN="$TIMEOUT_MIN"
+                        
                         if pct status "$VMID" >/dev/null 2>&1; then
                             if [ "$LXC_SUSPEND_METHOD" = "suspend" ]; then
                                 log "Suspending LXC [$VMID]..."
                                 pct suspend "$VMID"
+                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_SUSPENDED\"")"
                             else
                                 log "Stopping LXC [$VMID]..."
                                 pct stop "$VMID"
+                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_STOPPED\"")"
                             fi
                         else
                             if [ "$VM_SUSPEND_METHOD" = "suspend" ]; then
                                 log "Suspending VM [$VMID]..."
                                 qm suspend "$VMID" --todisk 0
+                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_SUSPENDED\"")"
                             else
                                 log "Shutting down VM [$VMID]..."
                                 qm shutdown "$VMID"
+                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_STOPPED\"")"
                             fi
                         fi
                     else
@@ -199,14 +273,31 @@ fi
 
 # 3. Check Network Connections on Monitored Ports
 for port in $(echo "$MONITORED_PORTS" | tr ',' ' '); do
-    # We look for ESTABLISHED connections on the given port
-    # Avoid matching local listening sockets or loops
-    CONN_COUNT=$(ss -t -an state established | grep -c -E ":$port[[:space:]]")
-    if [ "$CONN_COUNT" -gt 0 ]; then
-        log "BLOCK: Found $CONN_COUNT active TCP connection(s) on monitored port $port. Host is NOT idle."
+    port_num=$(echo "$port" | cut -d'/' -f1)
+    proto=$(echo "$port" | cut -d'/' -f2 -s)
+    [ -z "$proto" ] && proto="tcp"
+    
+    conn_count=0
+    if [ "$proto" = "tcp" ]; then
+        # We look for ESTABLISHED TCP connections on the given port
+        # Avoid matching local listening sockets or loops
+        conn_count=$(ss -t -an state established | grep -c -E ":$port_num[[:space:]]")
+    else
+        # For UDP, check conntrack if available, else fallback to ss -ua
+        if command -v conntrack >/dev/null 2>&1; then
+            conn_count=$(conntrack -L -p udp --dport "$port_num" 2>/dev/null | grep -c -E "ESTABLISHED|ASSURED")
+        else
+            # Native fallback using ss -u -an
+            conn_count=$(ss -u -an | grep -c -E ":$port_num[[:space:]]")
+        fi
+    fi
+    
+    if [ "$conn_count" -gt 0 ]; then
+        log "BLOCK: Found $conn_count active $proto connection(s) on monitored port $port_num. Host is NOT idle."
         exit 0
     fi
 done
+
 
 fi
 
@@ -262,18 +353,47 @@ for vmid in $RUNNING_VMS; do
     fi
 done
 
-# Wait for stopped/shutdown nodes to fully power down if needed
+# Wait for stopped/shutdown nodes to fully power down with timeout
 if [ -n "$STOPPED_LXCS" ] || [ -n "$SHUTDOWN_VMS" ]; then
-    log "Waiting for stopped guest nodes to power off..."
-    sleep 5
+    log "Waiting for guest nodes to power off completely..."
+    for i in $(seq 1 12); do
+        ACTIVE_COUNT=0
+        for vmid in $STOPPED_LXCS $SHUTDOWN_VMS; do
+            if qm status "$vmid" >/dev/null 2>&1 && [ "$(qm status "$vmid" | awk '{print $2}')" = "running" ]; then
+                ACTIVE_COUNT=$((ACTIVE_COUNT + 1))
+            elif pct status "$vmid" >/dev/null 2>&1 && [ "$(pct status "$vmid" | awk '{print $2}')" = "running" ]; then
+                ACTIVE_COUNT=$((ACTIVE_COUNT + 1))
+            fi
+        done
+        if [ "$ACTIVE_COUNT" -eq 0 ]; then
+            log "All guest nodes stopped cleanly."
+            break
+        fi
+        sleep 5
+    done
 fi
 
-# 6. Put Proxmox Host to Sleep (ACPI S3 State)
-log "Zzz: Suspending Proxmox host to RAM (ACPI S3)..."
-sync
-
-# Transition to S3 Suspend
-systemctl suspend
+# 6. Put Proxmox Host to Sleep (ACPI S3 State), Shutdown or Reboot
+if [ "$ACTION" = "shutdown" ]; then
+    log "Shutdown: Powering off Proxmox host..."
+    notify "🛑 *Proxmox Host Shutting Down:* System is powering off cleanly!"
+    sync
+    sleep 3
+    shutdown -h now
+    exit 0
+elif [ "$ACTION" = "reboot" ]; then
+    log "Reboot: Rebooting Proxmox host..."
+    notify "🔄 *Proxmox Host Rebooting:* System is rebooting cleanly!"
+    sync
+    sleep 3
+    reboot
+    exit 0
+else
+    log "Zzz: Suspending Proxmox host to RAM (ACPI S3)..."
+    sync
+    sleep 3
+    systemctl suspend
+fi
 
 # =============================================================================
 # === THE HOST IS NOW ASLEEP. EXECUTION STOPS HERE UNTIL SYSTEM WAKES UP. ===

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arukast Homelab</title>
+    <title>Arukast Homelab Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -13,7 +13,7 @@
     <style>
         :root {
             --bg-color: #030712;
-            --card-bg: rgba(17, 24, 39, 0.7);
+            --card-bg: rgba(17, 24, 39, 0.55);
             --border-color: rgba(255, 255, 255, 0.08);
             --accent-primary: #3b82f6;
             --accent-secondary: #8b5cf6;
@@ -32,63 +32,345 @@
             font-family: 'Inter', sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            overflow-x: hidden;
             position: relative;
+            padding: 40px 20px;
         }
 
         /* Glowing background blobs */
         .glow-blob {
             position: absolute;
             border-radius: 50%;
-            filter: blur(120px);
-            opacity: 0.15;
+            filter: blur(140px);
+            opacity: 0.12;
             z-index: 1;
             pointer-events: none;
-            transition: background 0.8s ease;
+            transition: all 0.8s ease;
         }
 
         .glow-1 {
-            width: 400px;
-            height: 400px;
+            width: 500px;
+            height: 500px;
             background: var(--accent-primary);
             top: -100px;
             left: -100px;
         }
 
         .glow-2 {
-            width: 500px;
-            height: 500px;
+            width: 600px;
+            height: 600px;
             background: var(--accent-secondary);
             bottom: -150px;
             right: -100px;
         }
 
-        /* Glassmorphism Card Container */
-        .card {
-            background: var(--card-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 48px;
-            width: 90%;
-            max-width: 480px;
-            text-align: center;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        /* Container layouts */
+        .container {
+            width: 100%;
+            max-width: 960px;
             z-index: 10;
-            transition: all 0.5s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 32px;
         }
 
-        /* Pulsating Server Ring Animation */
+        /* Premium Glassmorphic Cards */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-color);
+            border-radius: 28px;
+            padding: 40px;
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Portal grid layout */
+        .dashboard-wrapper {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .dashboard-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 16px 28px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .host-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .search-container {
+            width: 100%;
+            max-width: 320px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 20px;
+            padding-left: 44px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            fill: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        /* Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 20px;
+            width: 100%;
+        }
+
+        /* Generic Service Card */
+        .service-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 22px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .service-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            opacity: 0.7;
+        }
+
+        .service-card:hover {
+            transform: translateY(-6px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(139, 92, 246, 0.1);
+        }
+
+        .service-icon-wrapper {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+
+        .service-icon-wrapper svg {
+            width: 22px;
+            height: 22px;
+            fill: #fff;
+            opacity: 0.85;
+        }
+
+        .service-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .service-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .service-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #eab308;
+        }
+
+        .service-dot.online {
+            background: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
+        }
+
+        .service-dot.waking {
+            background: var(--accent-primary);
+            box-shadow: 0 0 6px var(--accent-primary);
+            animation: pulse-blink 1.2s infinite ease-in-out;
+        }
+
+        .service-btn {
+            width: 100%;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            font-family: inherit;
+            margin-top: auto;
+            text-decoration: none;
+            display: block;
+        }
+
+        .service-btn:hover {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            border-color: transparent;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .service-btn.active-btn {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            border-color: rgba(16, 185, 129, 0.25);
+            cursor: default;
+        }
+
+        .service-btn.active-btn:hover {
+            transform: none;
+            box-shadow: none;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        /* Modal popup styles for Passcode inputs */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 7, 18, 0.8);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 36px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transform: scale(0.9);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: scale(1);
+        }
+
+        /* Typography styles */
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #ffffff 0%, #d1d5db 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        /* Dynamic Waking screen loader elements */
         .avatar-container {
             position: relative;
-            width: 140px;
-            height: 140px;
-            margin: 0 auto 32px;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 28px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -100,7 +382,6 @@
             border-radius: 50%;
             opacity: 0;
             animation: pulse-out 3s infinite cubic-bezier(0.21, 0.85, 0.44, 1);
-            transition: border-color 0.8s ease;
         }
 
         .pulse-ring:nth-child(2) {
@@ -114,8 +395,8 @@
         }
 
         .server-avatar {
-            width: 80px;
-            height: 80px;
+            width: 72px;
+            height: 72px;
             background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             border-radius: 50%;
             display: flex;
@@ -123,49 +404,122 @@
             justify-content: center;
             box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
             z-index: 2;
-            transition: all 0.5s ease, background 0.8s ease, box-shadow 0.8s ease;
-        }
-
-        .server-avatar svg {
-            width: 38px;
-            height: 38px;
-            fill: #ffffff;
             transition: all 0.5s ease;
         }
 
-        /* Server State Indicators */
         .server-avatar.online {
             background: linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);
-            box-shadow: 0 0 35px rgba(16, 185, 129, 0.6);
+            box-shadow: 0 0 35px rgba(16, 185, 129, 0.5);
         }
 
-        /* Typography */
-        h1 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            letter-spacing: -0.5px;
-            background: linear-gradient(90deg, #ffffff 0%, #d1d5db 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+        .server-avatar svg {
+            width: 32px;
+            height: 32px;
+            fill: #ffffff;
         }
 
-        p {
+        /* Input and Button styles */
+        .input-field {
+            width: 100%;
+            padding: 14px 20px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            text-align: center;
             font-size: 15px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .input-field:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Hide Webkit and Microsoft Edge default native password reveal buttons */
+        .input-field::-ms-reveal,
+        .input-field::-ms-clear {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+
+        .input-field::-webkit-contacts-auto-fill-button,
+        .input-field::-webkit-credentials-auto-fill-button {
+            visibility: hidden !important;
+            display: none !important;
+            pointer-events: none !important;
+        }
+
+        /* Password Show/Hide Toggle Styles */
+        .password-wrapper {
+            position: relative;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        .password-wrapper .input-field {
+            margin-bottom: 0;
+            padding-right: 50px;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
             color: var(--text-secondary);
-            line-height: 1.6;
-            margin-bottom: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            transition: color 0.2s;
+            outline: none;
+        }
+
+        .password-toggle:hover {
+            color: #fff;
+        }
+
+        .password-toggle svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 14px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+            font-family: inherit;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3);
         }
 
         /* Glowing Progress Bar */
         .progress-container {
             width: 100%;
-            height: 6px;
+            height: 5px;
             background: rgba(255, 255, 255, 0.05);
             border-radius: 100px;
             overflow: hidden;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             position: relative;
         }
 
@@ -174,7 +528,6 @@
             height: 100%;
             background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             border-radius: 100px;
-            box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
             transition: width 0.3s ease;
         }
 
@@ -184,48 +537,48 @@
             gap: 8px;
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            padding: 8px 16px;
+            padding: 6px 14px;
             border-radius: 100px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 500;
             color: var(--text-secondary);
         }
 
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: #eab308;
-            box-shadow: 0 0 8px #eab308;
-            animation: blink 1.5s infinite ease-in-out;
+            box-shadow: 0 0 6px #eab308;
+            animation: pulse-blink 1.5s infinite ease-in-out;
         }
 
         .status-dot.online {
             background: var(--accent-green);
-            box-shadow: 0 0 8px var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
             animation: none;
         }
 
         /* Animations */
         @keyframes pulse-out {
             0% {
-                width: 80px;
-                height: 80px;
+                width: 72px;
+                height: 72px;
                 opacity: 0.8;
             }
 
             100% {
-                width: 150px;
-                height: 150px;
+                width: 130px;
+                height: 130px;
                 opacity: 0;
             }
         }
 
-        @keyframes blink {
+        @keyframes pulse-blink {
 
             0%,
             100% {
-                opacity: 0.3;
+                opacity: 0.4;
             }
 
             50% {
@@ -233,22 +586,29 @@
             }
         }
 
-        @keyframes success-pop {
-            0% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.15);
-            }
-
-            100% {
-                transform: scale(1);
-            }
+        /* Custom alert notification toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            backdrop-filter: blur(12px);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
         }
 
-        .success-anim {
-            animation: success-pop 0.5s ease-out forwards;
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
         }
     </style>
 </head>
@@ -257,355 +617,829 @@
     <div class="glow-blob glow-1"></div>
     <div class="glow-blob glow-2"></div>
 
-    <div class="card" id="main-card">
-        <!-- Passcode Entry Form -->
-        <div id="passcode-block" style="display: none;">
-            <h1 id="passcode-title" style="margin-bottom: 16px;">Access Verification</h1>
-            <p id="passcode-desc" style="margin-bottom: 24px;">This homelab is secured. Please enter the passcode to
-                initiate the server wake sequence.</p>
-            <input type="password" id="passcode-input" placeholder="Enter passcode..."
-                style="width: 100%; padding: 14px 20px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.3); color: #fff; text-align: center; font-size: 16px; margin-bottom: 16px; outline: none; transition: all 0.3s; font-family: inherit;">
-            <div id="remember-me-container"
-                style="display: flex; align-items: center; justify-content: flex-start; margin-bottom: 24px;">
-                <input type="checkbox" id="remember-me" checked
-                    style="width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: pointer; margin-right: 10px;">
-                <label for="remember-me"
-                    style="color: var(--text-secondary); font-size: 14px; cursor: pointer; user-select: none;">Remember
-                    my passcode</label>
+    <div class="container">
+        <!-- PORTAL ACCESS GATEKEEPER -->
+        <div class="card" id="portal-lock-card" style="display: none;">
+            <h1 id="portal-lock-title">Portal Access</h1>
+            <p>This homelab gateway is secured. Please enter your portal passcode to unlock the dashboard.</p>
+            <p id="portal-error-msg"
+                style="color: #ef4444; font-size: 13px; margin-bottom: 16px; display: none; font-weight: 500;">❌ Invalid
+                portal passcode. Please try again.</p>
+            <div class="password-wrapper">
+                <input type="password" id="portal-passcode" class="input-field" placeholder="Enter portal passcode...">
+                <button type="button" class="password-toggle"
+                    onclick="togglePasswordVisibility('portal-passcode', this)">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                    </svg>
+                </button>
             </div>
-            <button id="passcode-submit"
-                style="width: 100%; padding: 14px; border-radius: 14px; border: none; background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s; font-family: inherit;">Verify
-                & Wake Host</button>
+            <div id="portal-remember-container"
+                style="display: flex; align-items: center; justify-content: flex-start; margin-bottom: 20px;">
+                <input type="checkbox" id="portal-remember-me" checked
+                    style="width: 15px; height: 15px; accent-color: var(--accent-primary); cursor: pointer; margin-right: 8px;">
+                <label for="portal-remember-me"
+                    style="color: var(--text-secondary); font-size: 13px; cursor: pointer; user-select: none;">Remember
+                    this passcode</label>
+            </div>
+            <button id="portal-lock-submit" class="submit-btn">Unlock Portal</button>
         </div>
 
-        <!-- Active Loader Screen -->
-        <div id="loading-block">
-            <div class="avatar-container">
-                <div class="pulse-ring" id="ring1"></div>
-                <div class="pulse-ring" id="ring2"></div>
-                <div class="pulse-ring" id="ring3"></div>
-                <div class="server-avatar" id="avatar">
-                    <svg viewBox="0 0 24 24" id="server-icon">
+        <!-- UNIFIED HOMELAB DIRECTORY DASHBOARD -->
+        <div class="dashboard-wrapper" id="dashboard-container" style="display: none;">
+            <div class="dashboard-header">
+                <div class="host-info">
+                    <h2>Homelab Directory</h2>
+                    <div class="status-badge" style="padding: 4px 10px; font-size: 11px;">
+                        <span class="status-dot" id="host-status-dot"></span>
+                        <span id="host-status-text">Checking Host...</span>
+                    </div>
+                </div>
+                <div class="search-container">
+                    <svg class="search-icon" viewBox="0 0 24 24">
                         <path
-                            d="M4,17H20V15H4V17M4,9H20V7H4V9M19,22H5C3.89,22 3,21.1 3,20V4C3,2.9 3.89,2 5,2H19C20.1,2 21,2.9 21,4V20C21,21.1 20.1,22 19,22M5,4V20H19V4H5M11,10H13V12H11V10M11,16H13V18H11V16Z" />
+                            d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
                     </svg>
+                    <input type="text" id="search-bar" class="search-input" placeholder="Search servers...">
                 </div>
             </div>
 
-            <h1 id="title">Homelab is Sleeping</h1>
-            <p id="description">Your web request has triggered a Wake-on-LAN signal. The server is booting and
-                self-hosted services are mounting.</p>
+            <div class="grid" id="guest-grid">
+                <!-- Dynamic cards populated here -->
+            </div>
+        </div>
 
-            <div class="progress-container">
-                <div class="progress-bar" id="progress"></div>
+        <!-- FOCUSED SINGLE SERVICE WAKING VIEW -->
+        <div class="card" id="single-waking-card" style="display: none;">
+            <div id="service-passcode-block" style="display: none;">
+                <h1 id="service-passcode-title">Access Verification</h1>
+                <p id="service-passcode-desc">This service is secured. Please enter the passcode to wake it up.</p>
+                <div class="password-wrapper">
+                    <input type="password" id="service-passcode-input" class="input-field"
+                        placeholder="Enter passcode...">
+                    <button type="button" class="password-toggle"
+                        onclick="togglePasswordVisibility('service-passcode-input', this)">
+                        <svg viewBox="0 0 24 24">
+                            <path
+                                d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                        </svg>
+                    </button>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: flex-start; margin-bottom: 20px;">
+                    <input type="checkbox" id="service-remember-me" checked
+                        style="width: 15px; height: 15px; accent-color: var(--accent-primary); cursor: pointer; margin-right: 8px;">
+                    <label for="service-remember-me"
+                        style="color: var(--text-secondary); font-size: 13px; cursor: pointer; user-select: none;">Remember
+                        this passcode</label>
+                </div>
+                <button id="service-passcode-submit" class="submit-btn">Verify & Wake</button>
             </div>
 
-            <div class="status-badge">
-                <span class="status-dot" id="dot"></span>
-                <span id="badge-text">Waking Host...</span>
+            <div id="service-loading-block">
+                <div class="avatar-container">
+                    <div class="pulse-ring" id="ring1"></div>
+                    <div class="pulse-ring" id="ring2"></div>
+                    <div class="pulse-ring" id="ring3"></div>
+                    <div class="server-avatar" id="avatar">
+                        <svg viewBox="0 0 24 24">
+                            <path
+                                d="M4,17H20V15H4V17M4,9H20V7H4V9M19,22H5C3.89,22 3,21.1 3,20V4C3,2.9 3.89,2 5,2H19C20.1,2 21,2.9 21,4V20C21,21.1 20.1,22 19,22M5,4V20H19V4H5M11,10H13V12H11V10M11,16H13V18H11V16Z" />
+                        </svg>
+                    </div>
+                </div>
+
+                <h1 id="waking-title">Checking Server Status</h1>
+                <p id="waking-desc">Querying homelab gateway for service details...</p>
+
+                <div class="progress-container">
+                    <div class="progress-bar" id="waking-progress"></div>
+                </div>
+
+                <div class="status-badge">
+                    <span class="status-dot" id="waking-dot"></span>
+                    <span id="waking-badge-text">Querying...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PORTAL WAKE MODAL POPUP (USED IN DIRECTORY DASHBOARD) -->
+        <div class="modal-overlay" id="portal-modal">
+            <div class="modal-card">
+                <h2 id="modal-title" style="margin-bottom: 12px;">Passcode Verification</h2>
+                <p id="modal-desc" style="margin-bottom: 20px;">Please enter the passcode to wake this service.</p>
+                <div class="password-wrapper">
+                    <input type="password" id="modal-passcode-input" class="input-field"
+                        placeholder="Enter passcode...">
+                    <button type="button" class="password-toggle"
+                        onclick="togglePasswordVisibility('modal-passcode-input', this)">
+                        <svg viewBox="0 0 24 24">
+                            <path
+                                d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                        </svg>
+                    </button>
+                </div>
+                <div
+                    style="display: flex; align-items: center; justify-content: flex-start; margin-bottom: 20px; text-align: left;">
+                    <input type="checkbox" id="modal-remember-me" checked
+                        style="width: 15px; height: 15px; accent-color: var(--accent-primary); cursor: pointer; margin-right: 8px;">
+                    <label for="modal-remember-me"
+                        style="color: var(--text-secondary); font-size: 13px; cursor: pointer; user-select: none;">Remember
+                        this passcode</label>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button id="modal-cancel-btn" class="submit-btn"
+                        style="background: rgba(255,255,255,0.05); color: #fff;">Cancel</button>
+                    <button id="modal-submit-btn" class="submit-btn">Verify & Wake</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        let progressWidth = 0;
-        const progressEl = document.getElementById('progress');
-        const titleEl = document.getElementById('title');
-        const descEl = document.getElementById('description');
-        const avatarEl = document.getElementById('avatar');
-        const ring1 = document.getElementById('ring1');
-        const ring2 = document.getElementById('ring2');
-        const ring3 = document.getElementById('ring3');
-        const dotEl = document.getElementById('dot');
-        const badgeEl = document.getElementById('badge-text');
+    <!-- Toast notifier -->
+    <div id="rate-toast" class="toast">DDoS Guard: Please wait a moment before sending another request.</div>
 
-        // Passcode elements
-        const passcodeBlock = document.getElementById('passcode-block');
-        const loadingBlock = document.getElementById('loading-block');
-        const passcodeInput = document.getElementById('passcode-input');
-        const passcodeSubmit = document.getElementById('passcode-submit');
+    <script>
+        // Core elements
+        const portalLockCard = document.getElementById('portal-lock-card');
+        const portalPasscode = document.getElementById('portal-passcode');
+        const portalSubmit = document.getElementById('portal-lock-submit');
+
+        const dashboardContainer = document.getElementById('dashboard-container');
+        const guestGrid = document.getElementById('guest-grid');
+        const hostStatusDot = document.getElementById('host-status-dot');
+        const hostStatusText = document.getElementById('host-status-text');
+        const searchBar = document.getElementById('search-bar');
+
+        const singleWakingCard = document.getElementById('single-waking-card');
+        const servicePasscodeBlock = document.getElementById('service-passcode-block');
+        const servicePasscodeSubmit = document.getElementById('service-passcode-submit');
+        const servicePasscodeInput = document.getElementById('service-passcode-input');
+        const serviceLoadingBlock = document.getElementById('service-loading-block');
+        const wakingTitle = document.getElementById('waking-title');
+        const wakingDesc = document.getElementById('waking-desc');
+        const wakingProgress = document.getElementById('waking-progress');
+        const wakingDot = document.getElementById('waking-dot');
+        const wakingBadgeText = document.getElementById('waking-badge-text');
+        const avatarEl = document.getElementById('avatar');
+
+        const portalModal = document.getElementById('portal-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalInput = document.getElementById('modal-passcode-input');
+        const modalSubmit = document.getElementById('modal-submit-btn');
+        const modalCancel = document.getElementById('modal-cancel-btn');
 
         // Parse query params
         const urlParams = new URLSearchParams(window.location.search);
         const vmidParam = urlParams.get('vmid') || urlParams.get('service') || urlParams.get('name') || '';
 
-        // Isolate localStorage key per service
+        // Local storage cache keys
         const storageKey = vmidParam ? 'wake_code_' + vmidParam.toLowerCase().replace(/[^a-z0-9]/g, '') : 'wake_code_host';
-        let storedCode = localStorage.getItem(storageKey) || '';
+        const portalStorageKey = 'homelab_portal_access_key';
 
-        let serviceName = "Homelab";
-        let resolvedVmid = "";
+        let activePortalCode = localStorage.getItem(portalStorageKey) || '';
+        let activeServiceCode = localStorage.getItem(storageKey) || '';
+        let serviceName = "Homelab Service";
+        let isSingleViewOnline = false;
+        let progressWidth = 0;
+        let progressInterval = null;
+        let dashboardInterval = null;
+        let currentPollingInterval = 30000;
 
-        // Apply theme based on service name
-        function applyServiceTheme(name) {
-            const lowerName = name.toLowerCase();
-            let primaryColor = "#3b82f6"; // Default Cyber Blue
-            let secondaryColor = "#8b5cf6"; // Default Quantum Purple
-            let customIconSvg = null;
+        // Custom Toast notifier helper
+        function showToast(msg) {
+            const toast = document.getElementById('rate-toast');
+            toast.innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
 
-            if (lowerName.includes("minecraft")) {
-                primaryColor = "#10b981"; // Emerald Green
-                secondaryColor = "#b45309"; // Dirt Brown / Gold
-                // Beautiful dynamic pixel grass block SVG
-                customIconSvg = `
-                    <svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;">
-                        <path d="M12,2L2,7L12,12L22,7L12,2M2,9V19L12,22V12L2,9M14,13V21.5L22,17.5V9L14,13M12,14.5L6,12.5V17L12,19.5V14.5Z" />
-                    </svg>
-                `;
-            } else if (lowerName.includes("unturned")) {
-                primaryColor = "#84cc16"; // Zombie Lime
-                secondaryColor = "#ea580c"; // Rust Orange
-                // Biohazard hazard sign SVG
-                customIconSvg = `
-                    <svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;">
-                        <path d="M12,2C11.5,2 11,2.4 11,3V6.05C9.47,6.4 8.16,7.24 7.21,8.37L5.13,6.29C4.74,5.9 4.11,5.9 3.72,6.29C3.33,6.68 3.33,7.31 3.72,7.7L5.8,9.78C4.67,10.73 3.83,12.04 3.48,13.57H0.5C0,13.57 0,14.07 0,14.57C0,15.07 0,15.57 0.5,15.57H3.48C3.83,17.1 4.67,18.41 5.8,19.36L3.72,21.44C3.33,21.83 3.33,22.46 3.72,22.85C4.11,23.24 4.74,23.24 5.13,22.85L7.21,20.77C8.16,21.9 9.47,22.74 11,23.09V26C11,26.5 11.5,26.5 12,26.5C12.5,26.5 13,26.5 13,26V23.09C14.53,22.74 15.84,21.9 16.79,20.77L18.87,22.85C19.26,23.24 19.89,23.24 20.28,22.85C20.67,22.46 20.67,21.83 20.28,21.44L18.2,19.36C19.33,18.41 20.17,17.1 20.52,15.57H23.5C24,15.57 24,15.07 24,14.57C24,14.07 24,13.57 23.5,13.57H20.52C20.17,12.04 19.33,10.73 18.2,9.78L20.28,7.7C20.67,7.31 20.67,6.68 20.28,6.29C19.89,5.9 19.26,5.9 18.87,6.29L16.79,8.37C15.84,7.24 14.53,6.4 13,6.05V3C13,2.4 12.5,2 12,2M12,9A5.5,5.5 0 0,1 17.5,14.5A5.5,5.5 0 0,1 12,20A5.5,5.5 0 0,1 6.5,14.5A5.5,5.5 0 0,1 12,9Z" />
-                    </svg>
-                `;
-            } else if (vmidParam) {
-                // Generic guest theme: Amber / Fire
-                primaryColor = "#f59e0b"; // Amber Orange
-                secondaryColor = "#ef4444"; // Crimson Red
-                // Epic gaming console/cube style SVG
-                customIconSvg = `
-                    <svg viewBox="0 0 24 24" id="server-icon" style="width:40px; height:40px; fill:#ffffff;">
-                        <path d="M21,16.5C21,16.88 20.79,17.21 20.47,17.37L12.57,21.82C12.21,22.02 11.79,22.02 11.43,21.82L3.53,17.37C3.21,17.21 3,16.88 3,16.5V7.5C3,7.12 3.21,6.79 3.53,6.63L11.43,2.18C11.79,1.98 12.21,1.98 12.57,2.18L20.47,6.63C20.79,6.79 21,7.12 21,7.5V16.5M12,4.15L6.04,7.5L12,10.85L17.96,7.5L12,4.15M5,9.22V15.65L11,19.03V12.61L5,9.22M19,9.22L13,12.61V19.03L19,15.65V9.22Z" />
-                    </svg>
-                `;
+        // Generic custom cards cache
+        let allGuests = [];
+        const sessionGuestCodes = {};
+
+        // Initialize!
+        window.addEventListener('DOMContentLoaded', () => {
+            if (vmidParam) {
+                // RUNS IN FOCUSED SINGLE SERVICE MODE
+                singleWakingCard.style.display = 'block';
+                checkSingleService(false); // Initial probe
+            } else {
+                // RUNS IN UNIFIED HOMELAB DIRECTORY DASHBOARD MODE
+                loadDashboard(false);
             }
+        });
 
-            // Apply to document CSS variables dynamically!
-            document.documentElement.style.setProperty('--accent-primary', primaryColor);
-            document.documentElement.style.setProperty('--accent-secondary', secondaryColor);
-
-            if (customIconSvg && document.getElementById('server-icon')) {
-                const parent = document.getElementById('server-icon').parentElement;
-                parent.innerHTML = customIconSvg;
+        // ---------------------------------------------------------------------
+        // UNIFIED DASHBOARD MODE FUNCTIONS
+        // ---------------------------------------------------------------------
+        function applyDynamicTitle(isPrivate) {
+            if (isPrivate === 1 || isPrivate === true) {
+                document.title = "Arukast Private Homelab Portal";
+                document.getElementById('portal-lock-title').innerText = "Private Portal Access";
+                document.querySelector('.host-info h2').innerText = "Private Homelab Directory";
+            } else {
+                document.title = "Arukast Public Homelab Portal";
+                document.getElementById('portal-lock-title').innerText = "Public Portal Access";
+                document.querySelector('.host-info h2').innerText = "Public Homelab Directory";
             }
         }
 
-        // Passcode Input UI Styling on focus
-        passcodeInput.addEventListener('focus', () => {
-            passcodeInput.style.borderColor = 'var(--accent-primary)';
-            passcodeInput.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.2)';
+        function startDashboardPolling(intervalMs = 30000) {
+            if (dashboardInterval && currentPollingInterval === intervalMs) return;
+
+            if (dashboardInterval) clearInterval(dashboardInterval);
+            currentPollingInterval = intervalMs;
+
+            dashboardInterval = setInterval(() => {
+                // Only poll if the dashboard is actively visible and the modal is NOT active
+                if (dashboardContainer.style.display === 'flex' && !portalModal.classList.contains('active')) {
+                    loadDashboard(false);
+                }
+            }, intervalMs);
+        }
+
+        function loadDashboard(forceTrigger = false) {
+            let fetchUrl = '/cgi-bin/status';
+            const params = [];
+            if (activePortalCode) {
+                params.push('portal_code=' + encodeURIComponent(activePortalCode));
+            }
+
+            // Gather all cached guest passcodes (both persistent and session memory)
+            const guestCodes = [];
+            // 1. Memory session-level codes
+            for (const vmid in sessionGuestCodes) {
+                if (sessionGuestCodes[vmid]) {
+                    guestCodes.push(vmid + ':' + sessionGuestCodes[vmid]);
+                }
+            }
+            // 2. LocalStorage persistent codes (if not already covered in session memory)
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('wake_code_') && key !== 'wake_code_host') {
+                    const vmid = key.substring(10).toLowerCase();
+                    const val = localStorage.getItem(key);
+                    if (val && !sessionGuestCodes[vmid]) {
+                        guestCodes.push(vmid + ':' + val);
+                    }
+                }
+            }
+            if (guestCodes.length > 0) {
+                params.push('guest_codes=' + encodeURIComponent(guestCodes.join(',')));
+            }
+
+            if (params.length > 0) {
+                fetchUrl += '?' + params.join('&');
+            }
+
+            fetch(fetchUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'portal_locked') {
+                        // Portal passcode required, render the portal lock UI
+                        portalLockCard.style.display = 'block';
+                        dashboardContainer.style.display = 'none';
+                        if (dashboardInterval) {
+                            clearInterval(dashboardInterval);
+                            dashboardInterval = null;
+                        }
+
+                        applyDynamicTitle(data.is_private);
+
+                        // Show error message if they typed a code and it failed
+                        if (activePortalCode) {
+                            document.getElementById('portal-error-msg').style.display = 'block';
+                            portalPasscode.style.borderColor = '#ef4444';
+                            activePortalCode = '';
+                            localStorage.removeItem(portalStorageKey);
+                        } else {
+                            document.getElementById('portal-error-msg').style.display = 'none';
+                        }
+
+                        portalPasscode.focus();
+                    } else if (data.status === 'blocked') {
+                        // IP rate limited
+                        showToast(data.message);
+                        setTimeout(() => loadDashboard(forceTrigger), 3000);
+                    } else {
+                        // Portal unlocked successfully!
+                        portalLockCard.style.display = 'none';
+                        dashboardContainer.style.display = 'flex';
+                        document.getElementById('portal-error-msg').style.display = 'none';
+                        portalPasscode.style.borderColor = 'var(--border-color)';
+
+                        applyDynamicTitle(data.is_private);
+
+                        // Set Host Status
+                        if (data.host.status === 'online') {
+                            hostStatusDot.className = "status-dot online";
+                            hostStatusText.innerText = "ONLINE";
+                        } else {
+                            hostStatusDot.className = "status-dot";
+                            hostStatusText.innerText = "SLEEPING";
+                        }
+
+                        // Store local portal code successfully verified if remember is checked
+                        if (activePortalCode) {
+                            if (document.getElementById('portal-remember-me').checked) {
+                                localStorage.setItem(portalStorageKey, activePortalCode);
+                            } else {
+                                localStorage.removeItem(portalStorageKey);
+                            }
+                        }
+
+                        allGuests = data.guests || [];
+                        renderGuestGrid(allGuests);
+
+                        // Adaptive Dashboard Polling: Poll faster (8s) if any VM is currently waking up
+                        const anyWaking = allGuests.some(g => g.status === 'waking');
+                        if (anyWaking) {
+                            startDashboardPolling(8000);
+                        } else {
+                            startDashboardPolling(30000);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error("Dashboard check error", err);
+                    showToast("Error connecting to gateway. Retrying...");
+                    setTimeout(() => loadDashboard(forceTrigger), 4000);
+                });
+        }
+
+        portalSubmit.addEventListener('click', () => {
+            const val = portalPasscode.value.trim();
+            if (val) {
+                activePortalCode = val;
+                loadDashboard(false);
+            }
         });
-        passcodeInput.addEventListener('blur', () => {
-            passcodeInput.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-            passcodeInput.style.boxShadow = 'none';
+        portalPasscode.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const val = portalPasscode.value.trim();
+                if (val) {
+                    activePortalCode = val;
+                    loadDashboard(false);
+                }
+            }
         });
 
-        // Submit passcode
-        passcodeSubmit.addEventListener('click', submitCode);
-        passcodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') submitCode();
+        function renderGuestGrid(guests) {
+            guestGrid.innerHTML = '';
+
+            if (guests.length === 0) {
+                guestGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">No servers authorized or configured for your connection path.</div>';
+                return;
+            }
+
+            guests.forEach(g => {
+                const card = document.createElement('div');
+                card.className = 'service-card';
+                card.setAttribute('data-name', g.name.toLowerCase());
+
+                let dotClass = "service-dot";
+                let statusText = "SLEEPING";
+                if (g.status === 'online') {
+                    dotClass = "service-dot online";
+                    statusText = "ONLINE";
+                } else if (g.status === 'waking') {
+                    dotClass = "service-dot waking";
+                    statusText = "WAKING";
+                }
+
+                let btnHtml = '';
+                if (g.status === 'online') {
+                    const isGame = g.name.toLowerCase().includes("minecraft") || g.name.toLowerCase().includes("unturned") || g.name.toLowerCase().includes("valheim");
+                    let actionBtn = '';
+                    if (isGame) {
+                        actionBtn = `<div class="service-btn active-btn">Active</div>`;
+                    } else {
+                        actionBtn = `<button class="service-btn" onclick="openWebService('${g.name}')">Open Web Interface</button>`;
+                    }
+
+                    if (g.passcode_required && !g.message) {
+                        btnHtml = `<div style="display: flex; gap: 8px; width: 100%; margin-top: auto;">
+                            <button class="service-btn" style="background: rgba(255,255,255,0.05); flex: 1;" onclick="triggerUnlockDetailsSequence('${g.vmid}', '${g.name}')">🔑 Unlock</button>
+                            <div style="flex: 1.5;">${actionBtn}</div>
+                        </div>`;
+                    } else {
+                        btnHtml = actionBtn;
+                    }
+                } else if (g.status === 'waking') {
+                    let actionBtn = `<div class="service-btn active-btn">Waking...</div>`;
+                    if (g.passcode_required && !g.message) {
+                        btnHtml = `<div style="display: flex; gap: 8px; width: 100%; margin-top: auto;">
+                            <button class="service-btn" style="background: rgba(255,255,255,0.05); flex: 1;" onclick="triggerUnlockDetailsSequence('${g.vmid}', '${g.name}')">🔑 Unlock</button>
+                            <div style="flex: 1.5;">${actionBtn}</div>
+                        </div>`;
+                    } else {
+                        btnHtml = actionBtn;
+                    }
+                } else {
+                    btnHtml = `<button class="service-btn" onclick="triggerWakeSequence('${g.vmid}', '${g.name}', ${g.passcode_required})">Wake Server</button>`;
+                }
+
+                let msgHtml = '';
+                if (g.message) {
+                    msgHtml = `<div class="service-desc" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; width: 100%; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; font-weight: 400; line-height: 1.4; word-break: break-all;">${g.message}</div>`;
+                }
+
+                card.innerHTML = `
+                    <div class="service-icon-wrapper">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M19 2H5C3.9 2 3 2.9 3 4V20C3 21.1 3.9 22 5 22H19C20.1 2 21 21.1 21 20V4C21 2.9 20.1 2 19 2M19 16H5V14H19V16M19 10H5V8H19V10Z" />
+                        </svg>
+                    </div>
+                    <div class="service-name">${g.name}</div>
+                    <div class="service-status-badge">
+                        <span class="${dotClass}"></span>
+                        <span>${statusText}</span>
+                    </div>
+                    ${msgHtml}
+                    ${btnHtml}
+                `;
+                guestGrid.appendChild(card);
+            });
+        }
+
+        // Live Grid Filtering/Search
+        searchBar.addEventListener('input', () => {
+            const query = searchBar.value.trim().toLowerCase();
+            const cards = guestGrid.querySelectorAll('.service-card');
+            cards.forEach(card => {
+                const name = card.getAttribute('data-name');
+                if (name.includes(query)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         });
 
-        function submitCode() {
-            const code = passcodeInput.value.trim();
+        // Trigger Wake popup Modal
+        let modalVmid = '';
+        let modalServiceName = '';
+
+        function triggerWakeSequence(vmid, name, passcodeReq) {
+            if (!passcodeReq) {
+                // Passcode-free service! Boot instantly with a single click.
+                executeWakeRequest(vmid, name, "");
+            } else {
+                // Passcode locked service, slide open the passcode input Modal
+                modalVmid = vmid;
+                modalServiceName = name;
+                modalTitle.innerText = `Verify Access: ${name}`;
+                modalDesc.innerText = `Please enter the verification passcode to wake the ${name} server.`;
+
+                const cachedCode = localStorage.getItem('wake_code_' + vmid.toLowerCase());
+                modalInput.value = cachedCode || '';
+
+                portalModal.classList.add('active');
+                modalInput.focus();
+            }
+        }
+
+        function triggerUnlockDetailsSequence(vmid, name) {
+            modalVmid = vmid;
+            modalServiceName = name;
+            modalTitle.innerText = `Unlock Details: ${name}`;
+            modalDesc.innerText = `Please enter the passcode to view the server description and details.`;
+
+            const cachedCode = localStorage.getItem('wake_code_' + vmid.toLowerCase());
+            modalInput.value = cachedCode || '';
+
+            portalModal.setAttribute('data-action', 'unlock');
+            portalModal.classList.add('active');
+            modalInput.focus();
+        }
+
+        function verifyGuestPasscode(vmid, code) {
+            let fetchUrl = `/cgi-bin/status?vmid=${vmid}&code=${encodeURIComponent(code)}`;
+            if (activePortalCode) {
+                fetchUrl += '&portal_code=' + encodeURIComponent(activePortalCode);
+            }
+            fetch(fetchUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'unauthorized') {
+                        showToast("Incorrect passcode.");
+                        sessionGuestCodes[vmid.toLowerCase()] = '';
+                        localStorage.removeItem('wake_code_' + vmid.toLowerCase());
+                    } else {
+                        showToast("Details unlocked successfully!");
+                        sessionGuestCodes[vmid.toLowerCase()] = code;
+                        loadDashboard(false);
+                    }
+                })
+                .catch(() => {
+                    showToast("Error verifying passcode.");
+                });
+        }
+
+        modalCancel.addEventListener('click', () => {
+            portalModal.removeAttribute('data-action');
+            portalModal.classList.remove('active');
+        });
+
+        modalSubmit.addEventListener('click', () => {
+            const code = modalInput.value.trim();
             if (code) {
-                // Instantly disable button to prevent DDoS spamming
-                passcodeSubmit.disabled = true;
-                passcodeSubmit.innerText = "Verifying Access...";
-                passcodeSubmit.style.opacity = "0.7";
-                passcodeSubmit.style.cursor = "not-allowed";
+                portalModal.classList.remove('active');
+                sessionGuestCodes[modalVmid.toLowerCase()] = code;
+                if (document.getElementById('modal-remember-me').checked) {
+                    localStorage.setItem('wake_code_' + modalVmid.toLowerCase(), code);
+                } else {
+                    localStorage.removeItem('wake_code_' + modalVmid.toLowerCase());
+                }
 
-                if (document.getElementById('remember-me').checked) {
-                    localStorage.setItem(storageKey, code);
+                const action = portalModal.getAttribute('data-action');
+                portalModal.removeAttribute('data-action');
+                if (action === 'unlock') {
+                    verifyGuestPasscode(modalVmid, code);
+                } else {
+                    executeWakeRequest(modalVmid, modalServiceName, code);
+                }
+            }
+        });
+
+        modalInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const code = modalInput.value.trim();
+                if (code) {
+                    portalModal.classList.remove('active');
+                    sessionGuestCodes[modalVmid.toLowerCase()] = code;
+                    if (document.getElementById('modal-remember-me').checked) {
+                        localStorage.setItem('wake_code_' + modalVmid.toLowerCase(), code);
+                    } else {
+                        localStorage.removeItem('wake_code_' + modalVmid.toLowerCase());
+                    }
+
+                    const action = portalModal.getAttribute('data-action');
+                    portalModal.removeAttribute('data-action');
+                    if (action === 'unlock') {
+                        verifyGuestPasscode(modalVmid, code);
+                    } else {
+                        executeWakeRequest(modalVmid, modalServiceName, code);
+                    }
+                }
+            }
+        });
+
+        function executeWakeRequest(vmid, name, code) {
+            let fetchUrl = `/cgi-bin/status?vmid=${vmid}&code=${encodeURIComponent(code)}&trigger=1`;
+            if (activePortalCode) {
+                fetchUrl += '&portal_code=' + encodeURIComponent(activePortalCode);
+            }
+
+            fetch(fetchUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'blocked' || data.status === 'cooldown') {
+                        showToast(data.message);
+                    } else if (data.status === 'unauthorized') {
+                        showToast("Access Denied: Incorrect passcode.");
+                    } else {
+                        // Waking initiated successfully! Cache will be handled based on user choice.
+
+                        // For webapps (non-games), we automatically redirect when awake!
+                        const isGame = name.toLowerCase().includes("minecraft") || name.toLowerCase().includes("unturned") || name.toLowerCase().includes("valheim");
+                        if (!isGame) {
+                            showToast(`Waking ${name}... You will be automatically redirected when online.`);
+                            pollWebappAndRedirect(vmid, name, code);
+                        } else {
+                            showToast(`Wake command dispatched for ${name}! Waking host and starting server.`);
+                            setTimeout(() => loadDashboard(false), 2000);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error("Wake execution error", err);
+                    showToast("Error triggering wake. Retrying...");
+                });
+        }
+
+        function pollWebappAndRedirect(vmid, name, code) {
+            let fetchUrl = `/cgi-bin/status?vmid=${vmid}&code=${encodeURIComponent(code)}`;
+            if (activePortalCode) {
+                fetchUrl += '&portal_code=' + encodeURIComponent(activePortalCode);
+            }
+
+            fetch(fetchUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'online') {
+                        // Service is awake! Open redirect link immediately.
+                        openWebService(name);
+                    } else {
+                        // Keep polling
+                        setTimeout(() => pollWebappAndRedirect(vmid, name, code), 4000);
+                    }
+                })
+                .catch(() => {
+                    setTimeout(() => pollWebappAndRedirect(vmid, name, code), 4000);
+                });
+        }
+
+        function openWebService(name) {
+            // Generates URL based on common homelab naming. 
+            // Usually, users access NAS or UI directly via host IP on different ports, which the router forwards.
+            // Redirection NAT rules are cleared when ONLINE, so direct access via standard ports works natively.
+            // If they are on the landing page, we can open in new tab!
+            let redirectUrl = window.location.protocol + "//" + window.location.hostname;
+            if (name.toLowerCase().includes("proxmox")) {
+                redirectUrl += ":8006";
+            } else if (name.toLowerCase().includes("assistant")) {
+                redirectUrl += ":8123";
+            } else if (name.toLowerCase().includes("plex")) {
+                redirectUrl += ":32400/web";
+            } else if (name.toLowerCase().includes("nas")) {
+                redirectUrl += ":5000"; // Synology/etc
+            }
+            window.open(redirectUrl, '_blank');
+        }
+
+
+        // ---------------------------------------------------------------------
+        // FOCUSED SINGLE SERVICE WAKING VIEW FUNCTIONS
+        // ---------------------------------------------------------------------
+        function checkSingleService(isTrigger = false) {
+            if (isSingleViewOnline) return;
+
+            let fetchUrl = `/cgi-bin/status?vmid=${encodeURIComponent(vmidParam)}&code=${encodeURIComponent(activeServiceCode)}`;
+            if (isTrigger) fetchUrl += '&trigger=1';
+            if (activePortalCode) fetchUrl += '&portal_code=' + encodeURIComponent(activePortalCode);
+
+            fetch(fetchUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'portal_locked') {
+                        // Portal lock active, redirect to dashboard portal unlock UI
+                        singleWakingCard.style.display = 'none';
+                        portalLockCard.style.display = 'block';
+                        portalPasscode.focus();
+                        return;
+                    }
+
+                    serviceName = data.name || "Homelab Service";
+
+                    if (data.status === 'blocked' || data.status === 'cooldown') {
+                        showToast(data.message);
+                        setTimeout(() => checkSingleService(false), 3000);
+                        return;
+                    }
+
+                    if (data.status === 'unauthorized') {
+                        // Invalid passcode, show passcode verification block
+                        clearInterval(progressInterval);
+                        localStorage.removeItem(storageKey);
+                        progressWidth = 0;
+                        wakingProgress.style.width = '0%';
+
+                        serviceLoadingBlock.style.display = 'none';
+                        servicePasscodeBlock.style.display = 'block';
+                        servicePasscodeInput.focus();
+
+                        document.getElementById('service-passcode-title').innerText = `${serviceName} Access`;
+                        document.getElementById('service-passcode-desc').innerText = `Enter the passcode to verify authorization and wake the ${serviceName} server.`;
+                        servicePasscodeInput.placeholder = `Enter passcode...`;
+                    } else if (data.status === 'sleeping') {
+                        // Not unauthorized but offline and no code submitted
+                        clearInterval(progressInterval);
+                        progressWidth = 0;
+                        wakingProgress.style.width = '0%';
+
+                        if (data.passcode_required && !data.passcode_verified) {
+                            serviceLoadingBlock.style.display = 'none';
+                            servicePasscodeBlock.style.display = 'block';
+                            if (activeServiceCode) {
+                                servicePasscodeInput.value = activeServiceCode;
+                            }
+                        } else {
+                            // Passcode-free single service or already verified, wake instantly!
+                            servicePasscodeBlock.style.display = 'none';
+                            serviceLoadingBlock.style.display = 'block';
+                            startLoaderProgress();
+                            checkSingleService(true);
+                        }
+                    } else if (data.status === 'online') {
+                        isSingleViewOnline = true;
+                        clearInterval(progressInterval);
+                        wakingProgress.style.width = '100%';
+
+                        wakingTitle.innerText = `${serviceName} Active!`;
+                        wakingDesc.innerHTML = `${serviceName} is fully awake and online. You can connect now!`;
+                        if (data.message) {
+                            wakingDesc.innerHTML += `<br><br><strong style="color: #fff; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 14px; display: inline-block; text-align: left; width: 100%; font-weight: 500; font-size: 13px;">${data.message}</strong>`;
+                        }
+
+                        avatarEl.classList.add('online');
+                        wakingDot.className = "status-dot online";
+                        wakingBadgeText.innerText = "ONLINE";
+
+                        // Disable pulsing loading rings
+                        document.getElementById('ring1').style.animation = 'none';
+                        document.getElementById('ring2').style.animation = 'none';
+                        document.getElementById('ring3').style.animation = 'none';
+                        document.getElementById('ring1').style.opacity = '0';
+                        document.getElementById('ring2').style.opacity = '0';
+                        document.getElementById('ring3').style.opacity = '0';
+
+                        // Change server icon to checkmark
+                        avatarEl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg>';
+                        document.querySelector('.progress-container').style.display = 'none';
+
+                        // Redirect web services automatically
+                        const isGame = serviceName.toLowerCase().includes("minecraft") || serviceName.toLowerCase().includes("unturned") || serviceName.toLowerCase().includes("valheim");
+                        if (!isGame) {
+                            wakingTitle.innerText = `Redirecting to ${serviceName}...`;
+                            setTimeout(() => openWebService(serviceName), 1500);
+                        }
+                    } else {
+                        // Waking state
+                        wakingTitle.innerText = `Waking ${serviceName}...`;
+                        wakingDesc.innerHTML = `Dispatched Wake-on-LAN. unfreezing containers and mounting disk volumes. Please wait...`;
+                        if (data.message) {
+                            wakingDesc.innerHTML += `<br><br><strong style="color: #fff; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 12px 18px; border-radius: 14px; display: inline-block; text-align: left; width: 100%; font-weight: 500; font-size: 13px;">${data.message}</strong>`;
+                        }
+                        wakingBadgeText.innerText = "WAKING";
+                        wakingDot.className = "status-dot";
+
+                        setTimeout(() => checkSingleService(false), 4000);
+                    }
+                })
+                .catch(err => {
+                    console.error("Single service query error", err);
+                    setTimeout(() => checkSingleService(false), 4000);
+                });
+        }
+
+        servicePasscodeSubmit.addEventListener('click', () => {
+            const val = servicePasscodeInput.value.trim();
+            if (val) {
+                activeServiceCode = val;
+                if (document.getElementById('service-remember-me').checked) {
+                    localStorage.setItem(storageKey, val);
                 } else {
                     localStorage.removeItem(storageKey);
                 }
-                storedCode = code;
 
-                // Add a small 800ms debounce delay before transitioning UI
-                setTimeout(() => {
-                    passcodeBlock.style.display = 'none';
-                    loadingBlock.style.display = 'block';
+                servicePasscodeBlock.style.display = 'none';
+                serviceLoadingBlock.style.display = 'block';
+                startLoaderProgress();
+                checkSingleService(true);
+            }
+        });
+        servicePasscodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const val = servicePasscodeInput.value.trim();
+                if (val) {
+                    activeServiceCode = val;
+                    if (document.getElementById('service-remember-me').checked) {
+                        localStorage.setItem(storageKey, val);
+                    } else {
+                        localStorage.removeItem(storageKey);
+                    }
 
-                    // Reset button style for potential future sessions
-                    passcodeSubmit.disabled = false;
-                    passcodeSubmit.innerText = "Verify & Wake " + serviceName;
-                    passcodeSubmit.style.opacity = "1";
-                    passcodeSubmit.style.cursor = "pointer";
+                    servicePasscodeBlock.style.display = 'none';
+                    serviceLoadingBlock.style.display = 'block';
+                    startLoaderProgress();
+                    checkSingleService(true);
+                }
+            }
+        });
 
-                    startPacing();
-                    checkStatus(true);
-                }, 800);
+        function startLoaderProgress() {
+            if (progressInterval) clearInterval(progressInterval);
+            wakingProgress.style.width = '0%';
+            progressWidth = 0;
+
+            progressInterval = setInterval(() => {
+                if (progressWidth < 50) {
+                    progressWidth += 3;
+                } else if (progressWidth < 80) {
+                    progressWidth += 1;
+                } else if (progressWidth < 95) {
+                    progressWidth += 0.3;
+                }
+                wakingProgress.style.width = progressWidth + '%';
+            }, 350);
+        }
+
+        // Show/Hide Password Toggle helper
+        function togglePasswordVisibility(inputId, button) {
+            const input = document.getElementById(inputId);
+            if (input.type === "password") {
+                input.type = "text";
+                button.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92C21.27 15.39 23 12 23 12c-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.43 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
+            } else {
+                input.type = "password";
+                button.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
             }
         }
-
-        let progressInterval;
-        function startPacing() {
-            if (progressInterval) clearInterval(progressInterval);
-            progressInterval = setInterval(() => {
-                if (progressWidth < 60) {
-                    progressWidth += 2;
-                } else if (progressWidth < 85) {
-                    progressWidth += 0.8;
-                } else if (progressWidth < 95) {
-                    progressWidth += 0.2;
-                }
-                progressEl.style.width = progressWidth + '%';
-            }, 300);
-        }
-
-        // Fetch initial status info to dynamically label the page and determine branding
-        function initializePage() {
-            let fetchUrl = '/cgi-bin/status?';
-            if (vmidParam) fetchUrl += 'vmid=' + encodeURIComponent(vmidParam);
-
-            fetch(fetchUrl)
-                .then(response => response.json())
-                .then(data => {
-                    serviceName = data.name || "Homelab";
-                    resolvedVmid = data.vmid || vmidParam;
-
-                    // Style the cards dynamically
-                    applyServiceTheme(serviceName);
-
-                    // Dynamic text injection
-                    document.getElementById('passcode-title').innerText = serviceName + " Verification";
-                    document.getElementById('passcode-desc').innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it.";
-                    passcodeInput.placeholder = "Enter " + serviceName + " passcode...";
-                    passcodeSubmit.innerText = "Verify & Wake " + serviceName;
-
-                    titleEl.innerText = serviceName + " is Sleeping";
-                    descEl.innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it up.";
-                    badgeEl.innerText = "SLEEPING";
-
-                    // Always require explicit click to check/wake!
-                    loadingBlock.style.display = 'none';
-                    passcodeBlock.style.display = 'block';
-
-                    if (storedCode) {
-                        passcodeInput.value = storedCode;
-                        passcodeInput.style.display = 'none'; // Hide input since it's already saved
-                        document.getElementById('remember-me-container').style.display = 'none'; // Hide checkbox too
-                        document.getElementById('passcode-desc').innerText = "Click the button below to check if " + serviceName + " is online or wake it from sleep.";
-                        passcodeSubmit.innerText = "Check / Wake " + serviceName;
-                    }
-                })
-                .catch(err => {
-                    console.log("Error querying initial status", err);
-                    // Fallback routing flow in case router network is starting up
-                    applyServiceTheme("Homelab");
-                    loadingBlock.style.display = 'none';
-                    passcodeBlock.style.display = 'block';
-
-                    if (storedCode) {
-                        passcodeInput.value = storedCode;
-                        passcodeInput.style.display = 'none';
-                        document.getElementById('remember-me-container').style.display = 'none';
-                        document.getElementById('passcode-desc').innerText = "Click the button below to check if " + serviceName + " is online or wake it from sleep.";
-                        passcodeSubmit.innerText = "Check / Wake " + serviceName;
-                    }
-                });
-        }
-
-        let isOnline = false;
-
-        // Check host boot status via local CGI script
-        function checkStatus(isTrigger) {
-            if (isOnline) return; // Completely stop polling once online!
-
-            let fetchUrl = '/cgi-bin/status?';
-            if (vmidParam) fetchUrl += 'vmid=' + encodeURIComponent(vmidParam) + '&';
-            fetchUrl += 'code=' + encodeURIComponent(storedCode);
-            if (isTrigger) fetchUrl += '&trigger=1';
-
-            fetch(fetchUrl)
-                .then(response => response.json())
-                .then(data => {
-                    const serviceName = data.name || "Homelab";
-
-                    if (data.status === 'unauthorized') {
-                        clearInterval(progressInterval);
-                        localStorage.removeItem(storageKey); // Clear incorrect code
-                        progressWidth = 0;
-                        progressEl.style.width = '0%';
-
-                        // Switch to password screen with error state
-                        loadingBlock.style.display = 'none';
-                        passcodeBlock.style.display = 'block';
-                        passcodeInput.style.display = 'block'; // Ensure input is visible
-                        document.getElementById('remember-me-container').style.display = 'flex'; // Show checkbox again
-                        passcodeSubmit.innerText = "Verify & Wake " + serviceName; // Reset text
-                        passcodeInput.value = '';
-                        passcodeInput.placeholder = 'Invalid passcode, try again...';
-                        passcodeInput.style.borderColor = '#ef4444'; // Red alert border
-                        passcodeInput.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.2)';
-                    } else if (data.status === 'sleeping') {
-                        if (progressInterval) clearInterval(progressInterval);
-                        progressWidth = 0;
-                        progressEl.style.width = '0%';
-                        titleEl.innerText = serviceName + " is Sleeping";
-                        descEl.innerText = "The " + serviceName + " server is currently in power-saving mode. Please enter the passcode to wake it up.";
-                        badgeEl.innerText = "SLEEPING";
-                        dotEl.className = "status-dot";
-
-                        loadingBlock.style.display = 'none';
-                        passcodeBlock.style.display = 'block';
-                    } else if (data.status === 'online') {
-                        isOnline = true; // Mark as online to block further network requests!
-                        clearInterval(progressInterval);
-                        progressEl.style.width = '100%';
-
-                        // Apply success styling
-                        titleEl.innerText = serviceName + " Restored!";
-                        descEl.innerHTML = serviceName + " is now fully online. You can connect now!";
-                        if (data.message) {
-                            descEl.innerHTML += "<br><br><strong style='color: var(--text-primary);'>" + data.message + "</strong>";
-                        }
-
-                        avatarEl.classList.add('online', 'success-anim');
-                        dotEl.className = "status-dot online"; // Static green
-                        badgeEl.innerText = "ONLINE";
-
-                        // Disable pulsing rings
-                        ring1.style.animation = 'none';
-                        ring2.style.animation = 'none';
-                        ring3.style.animation = 'none';
-                        ring1.style.opacity = '0';
-                        ring2.style.opacity = '0';
-                        ring3.style.opacity = '0';
-
-                        // Success checkmark SVG injection
-                        const serverIcon = document.getElementById('server-icon');
-                        if (serverIcon) {
-                            serverIcon.outerHTML = '<svg viewBox="0 0 24 24" id="server-icon" style="width:42px; height:42px; fill:#ffffff;"><path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg>';
-                        }
-
-                        // Hide the progress bar
-                        document.querySelector('.progress-container').style.display = 'none';
-
-                        // Show a clean button when online instead of infinite reload loops!
-                        if (!document.getElementById('redirect-link-btn')) {
-                            const successMsgBtn = document.createElement('div');
-                            successMsgBtn.id = 'redirect-link-btn';
-                            successMsgBtn.innerText = serviceName + " is Ready!";
-                            successMsgBtn.style.cssText = "display: block; width: 100%; margin-top: 24px; padding: 14px; border-radius: 14px; border: none; background: rgba(16, 185, 129, 0.2); color: var(--accent-green); font-size: 16px; font-weight: 600; text-align: center; font-family: inherit; border: 1px solid var(--accent-green);";
-                            document.getElementById('loading-block').appendChild(successMsgBtn);
-                        }
-                    } else {
-                        // Waking/checking state
-                        titleEl.innerText = "Waking " + serviceName + "...";
-                        descEl.innerHTML = "The " + serviceName + " server is booting and unfreezing in Proxmox. Please wait a moment.";
-                        if (data.message) {
-                            descEl.innerHTML += "<br><br><strong style='color: var(--text-primary);'>" + data.message + "</strong>";
-                        }
-                        badgeEl.innerText = "WAKING";
-
-                        // Keep polling (Do not trigger spam notifications)
-                        setTimeout(() => checkStatus(false), 3000);
-                    }
-                })
-                .catch(err => {
-                    // Failures are expected during networking swap. Keep polling.
-                    console.log("Network status query failed, retrying...", err);
-                    setTimeout(() => checkStatus(false), 3000);
-                });
-        }
-
-        // Initialize!
-        initializePage();
     </script>
 </body>
 

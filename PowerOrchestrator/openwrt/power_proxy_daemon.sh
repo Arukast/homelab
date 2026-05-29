@@ -29,6 +29,7 @@ notify() {
     local msg="$1"
     echo "[Power Proxy] $msg"
     
+    # Telegram dispatch
     if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
         local target_chat="${NOTIFY_CHAT_ID}"
         [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
@@ -39,6 +40,24 @@ notify() {
                 --data-urlencode "text=🔔 *Power Monitor:* $msg" \
                 --data-urlencode "parse_mode=Markdown" >/dev/null &
         fi
+    fi
+
+    # Discord Webhook dispatch
+    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+        local color=3899126 # Default Cyber Blue
+        if echo "$msg" | grep -iqE "awake|online|restored"; then
+            color=1095905 # Green
+        elif echo "$msg" | grep -iqE "sleep|S3|offline|down|shutdown"; then
+            color=15680580 # Red/Amber
+        elif echo "$msg" | grep -iqE "reboot|rebooting"; then
+            color=9133302 # Purple/Indigo
+        fi
+        
+        # Clean text for json
+        local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
+        local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
+        
+        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null &
     fi
 }
 
@@ -102,6 +121,10 @@ remove_redirects() {
 
 # Start Game Listeners in the background
 start_game_listeners() {
+    if [ "$ENABLE_PORT_WAKE_LISTENERS" = "0" ]; then
+        echo "Port wake listeners are disabled, bypassing raw game wake listeners."
+        return
+    fi
     echo "Starting Game Wake-on-Demand listeners..."
     GAME_PIDS=""
     
@@ -132,6 +155,9 @@ stop_game_listeners() {
 # Start Guest Listeners for any suspended guests
 manage_guest_listeners() {
     [ -z "$GUEST_ORCHESTRATION_MAP" ] && return
+    if [ "$ENABLE_PORT_WAKE_LISTENERS" = "0" ]; then
+        return
+    fi
     
     for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
         VMID=$(echo "$entry" | cut -d':' -f1)
