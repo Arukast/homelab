@@ -98,6 +98,9 @@ DISCORD_WEBHOOK_URL=""
 # Map of friendly guest names (Must match OpenWrt config to display names instead of raw IDs)
 GUEST_NAME_MAP="120:Unturned,121:Minecraft"
 
+# Mappings of Guest VMIDs to their custom Web Interface redirect ports (For symmetry with OpenWrt)
+GUEST_PORT_MAP=""
+
 # --- Logs ---
 LOG_FILE="/var/log/proxmox_power.log"
 ENABLE_SYSLOG=1

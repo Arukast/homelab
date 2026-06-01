@@ -801,6 +801,8 @@
         let activePortalCode = localStorage.getItem(portalStorageKey) || '';
         let activeServiceCode = localStorage.getItem(storageKey) || '';
         let serviceName = "Homelab Service";
+        let servicePort = "";
+        let serviceIp = "";
         let isSingleViewOnline = false;
         let progressWidth = 0;
         let progressInterval = null;
@@ -1013,12 +1015,13 @@
 
                 let btnHtml = '';
                 if (g.status === 'online') {
-                    const isGame = g.name.toLowerCase().includes("minecraft") || g.name.toLowerCase().includes("unturned") || g.name.toLowerCase().includes("valheim");
+                    const isWeb = g.port || g.name.toLowerCase().includes("proxmox") || g.name.toLowerCase().includes("assistant") || g.name.toLowerCase().includes("plex") || g.name.toLowerCase().includes("nas") || g.name.toLowerCase().includes("wireguard") || g.name.toLowerCase().includes("wg-easy") || g.name.toLowerCase().includes("wg easy");
+                    const isGame = !isWeb;
                     let actionBtn = '';
                     if (isGame) {
                         actionBtn = `<div class="service-btn active-btn">Active</div>`;
                     } else {
-                        actionBtn = `<button class="service-btn" onclick="openWebService('${g.name}')">Open Web Interface</button>`;
+                        actionBtn = `<button class="service-btn" onclick="openWebService('${g.name}', '${g.port || ''}', '${g.ip || ''}')">Open Web Interface</button>`;
                     }
 
                     if (g.passcode_required && !g.message) {
@@ -1233,7 +1236,7 @@
                 .then(data => {
                     if (data.status === 'online') {
                         // Service is awake! Open redirect link immediately.
-                        openWebService(name);
+                        openWebService(name, data.port || '', data.ip || '');
                     } else {
                         // Keep polling
                         setTimeout(() => pollWebappAndRedirect(vmid, name, code), 4000);
@@ -1244,20 +1247,27 @@
                 });
         }
 
-        function openWebService(name) {
+        function openWebService(name, port = '', ip = '') {
             // Generates URL based on common homelab naming. 
             // Usually, users access NAS or UI directly via host IP on different ports, which the router forwards.
             // Redirection NAT rules are cleared when ONLINE, so direct access via standard ports works natively.
             // If they are on the landing page, we can open in new tab!
-            let redirectUrl = window.location.protocol + "//" + window.location.hostname;
-            if (name.toLowerCase().includes("proxmox")) {
-                redirectUrl += ":8006";
-            } else if (name.toLowerCase().includes("assistant")) {
-                redirectUrl += ":8123";
-            } else if (name.toLowerCase().includes("plex")) {
-                redirectUrl += ":32400/web";
-            } else if (name.toLowerCase().includes("nas")) {
-                redirectUrl += ":5000"; // Synology/etc
+            let targetHost = ip || window.location.hostname;
+            let redirectUrl = window.location.protocol + "//" + targetHost;
+            if (port) {
+                redirectUrl += ":" + port;
+            } else {
+                if (name.toLowerCase().includes("proxmox")) {
+                    redirectUrl += ":8006";
+                } else if (name.toLowerCase().includes("assistant")) {
+                    redirectUrl += ":8123";
+                } else if (name.toLowerCase().includes("plex")) {
+                    redirectUrl += ":32400/web";
+                } else if (name.toLowerCase().includes("nas")) {
+                    redirectUrl += ":5000"; // Synology/etc
+                } else if (name.toLowerCase().includes("wireguard") || name.toLowerCase().includes("wg-easy") || name.toLowerCase().includes("wg easy")) {
+                    redirectUrl += ":51821";
+                }
             }
             window.open(redirectUrl, '_blank');
         }
@@ -1285,6 +1295,8 @@
                     }
 
                     serviceName = data.name || "Homelab Service";
+                    servicePort = data.port || "";
+                    serviceIp = data.ip || "";
 
                     if (data.status === 'blocked' || data.status === 'cooldown') {
                         showToast(data.message);
@@ -1353,10 +1365,11 @@
                         document.querySelector('.progress-container').style.display = 'none';
 
                         // Redirect web services automatically
-                        const isGame = serviceName.toLowerCase().includes("minecraft") || serviceName.toLowerCase().includes("unturned") || serviceName.toLowerCase().includes("valheim");
+                        const isWeb = servicePort || serviceName.toLowerCase().includes("proxmox") || serviceName.toLowerCase().includes("assistant") || serviceName.toLowerCase().includes("plex") || serviceName.toLowerCase().includes("nas") || serviceName.toLowerCase().includes("wireguard") || serviceName.toLowerCase().includes("wg-easy") || serviceName.toLowerCase().includes("wg easy");
+                        const isGame = !isWeb;
                         if (!isGame) {
                             wakingTitle.innerText = `Redirecting to ${serviceName}...`;
-                            setTimeout(() => openWebService(serviceName), 1500);
+                            setTimeout(() => openWebService(serviceName, servicePort, serviceIp), 1500);
                         }
                     } else {
                         // Waking state

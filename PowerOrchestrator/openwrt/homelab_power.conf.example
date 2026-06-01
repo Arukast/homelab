@@ -108,6 +108,13 @@ GUEST_NAME_MAP="120:Minecraft,122:Unturned"
 GUEST_PASSCODE_MAP="120:mcpass,122:unturnedpass"
 GUEST_MESSAGE_MAP="120:Welcome to Minecraft!,122:Welcome to Unturned!"
 
+# Mappings of Guest VMIDs to their custom Web Interface redirect ports.
+# If configured, clicking 'Open Web Interface' will dynamically redirect to this port.
+# Format: "VMID:PORT,VMID:PORT"
+# Leave blank or omit for standard name-based fallback matching or port-free requests.
+GUEST_PORT_MAP=""
+
+
 
 
 
