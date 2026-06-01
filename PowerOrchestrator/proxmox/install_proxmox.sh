@@ -61,14 +61,18 @@ else
         cp homelab_power.conf.example /etc/homelab_power.conf
         echo "Created/Overwrote /etc/homelab_power.conf from the default template."
     fi
-    chmod 644 /etc/homelab_power.conf
+    chmod 600 /etc/homelab_power.conf
 fi
 
 # 3. Copy scripts
-echo -e "${GREEN}[3/5] Installing core monitoring script...${NC}"
+echo -e "${GREEN}[3/5] Installing core monitoring & wrapper scripts...${NC}"
 cp proxmox_idle_monitor.sh /usr/local/bin/proxmox_idle_monitor.sh
 chmod 755 /usr/local/bin/proxmox_idle_monitor.sh
 echo "Installed /usr/local/bin/proxmox_idle_monitor.sh"
+
+cp homelab_ssh_wrapper.sh /usr/local/bin/homelab_ssh_wrapper.sh
+chmod 755 /usr/local/bin/homelab_ssh_wrapper.sh
+echo "Installed /usr/local/bin/homelab_ssh_wrapper.sh"
 
 # 4. Copy systemd units
 echo -e "${GREEN}[4/5] Registering systemd services...${NC}"

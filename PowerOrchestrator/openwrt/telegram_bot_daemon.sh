@@ -252,6 +252,11 @@ ${vms}"
                 return
             fi
             
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
+                return
+            fi
+            
             # We run the entire waking & starting sequence in the background to prevent daemon blocking
             (
                 # Check if host is offline, if so wake it first
@@ -308,6 +313,11 @@ ${start_out:-Started successfully}
                 return
             fi
             
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
+                return
+            fi
+            
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
                 send_message "$chat_id" "$MSG_BOT_CT_STOP_HOST_OFFLINE"
                 return
@@ -333,6 +343,11 @@ ${stop_out:-Stop signal dispatched}
         /ctrestart)
             if [ -z "$arg1" ]; then
                 send_message "$chat_id" "$MSG_BOT_CT_RESTART_USAGE"
+                return
+            fi
+            
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
                 return
             fi
             

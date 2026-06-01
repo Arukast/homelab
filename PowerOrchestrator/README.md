@@ -95,13 +95,22 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    ```bash
    dropbearkey -y -f /etc/dropbear/id_dropbear | head -n 2 | tail -n 1 > /tmp/id_dropbear.pub
    ```
-4. **Append the public key to Proxmox's authorized keys**:
-   Copy the contents of `/tmp/id_dropbear.pub` and append it to `/root/.ssh/authorized_keys` on your Proxmox host.
+4. **Append and Restrict the Public Key on Proxmox**:
+   Copy the contents of `/tmp/id_dropbear.pub` and add it to `/root/.ssh/authorized_keys` on your Proxmox host.
+   
+   > [!IMPORTANT]
+   > **Secure and Restrict Root SSH Access!**
+   > To prevent arbitrary command execution as root on Proxmox, restrict this key to only running our orchestrator commands by prepending the command wrapper options. 
+   > Edit `/root/.ssh/authorized_keys` on Proxmox and make the entry look exactly like this:
+   > ```text
+   > command="/usr/local/bin/homelab_ssh_wrapper.sh",no-port-forwarding,no-x11-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1... (your Dropbear public key)
+   > ```
+
 5. **Test SSH connection from OpenWrt to Proxmox**:
    ```bash
-   ssh -i /etc/dropbear/id_dropbear root@192.168.12.10 "pvesh get /cluster/resources"
+   ssh -i /etc/dropbear/id_dropbear root@192.168.12.10 "echo OK"
    ```
-   *(Ensure it connects instantly without prompting for a password!)*
+   *(Ensure it connects instantly and returns "OK". Unauthorized arbitrary commands will be blocked with Access Denied.)*
 
 ---
 

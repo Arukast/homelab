@@ -208,6 +208,12 @@ if [ -n "$VMID" ] && ! echo "$VMID" | grep -qE "^[0-9]+$"; then
     fi
 fi
 
+# Strictly validate that VMID is numeric
+if [ -n "$VMID" ] && ! echo "$VMID" | grep -qE "^[0-9]+$"; then
+    echo "{\"status\": \"error\", \"message\": \"Invalid VMID format\"}"
+    exit 0
+fi
+
 # --- Portal Gatekeeper Authenticator ---
 IS_FUNNEL_REQUEST=0
 # If the request comes through Tailscale Funnel, it is SNI-proxied from the public internet (port 443/80),
