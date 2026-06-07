@@ -10,6 +10,22 @@ if [ ! -f "$CONF" ]; then
     exit 1
 fi
 
+PIDFILE="/var/run/telegram_bot_daemon.pid"
+if [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+        echo "ERROR: telegram_bot_daemon.sh is already running with PID $PID." >&2
+        exit 1
+    fi
+fi
+echo "$$" > "$PIDFILE"
+
+cleanup_pid() {
+    rm -f "$PIDFILE"
+    exit 0
+}
+trap cleanup_pid SIGTERM SIGINT EXIT
+
 # Load config
 . "$CONF"
 

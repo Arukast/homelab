@@ -10,6 +10,16 @@ if [ ! -f "$CONF" ]; then
     exit 1
 fi
 
+PIDFILE="/var/run/power_proxy_daemon.pid"
+if [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+        echo "ERROR: power_proxy_daemon.sh is already running with PID $PID." >&2
+        exit 1
+    fi
+fi
+echo "$$" > "$PIDFILE"
+
 # Load config
 . "$CONF"
 
@@ -31,19 +41,33 @@ notify() {
     
     # Telegram dispatch
     if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-        local target_chat="${NOTIFY_CHAT_ID}"
-        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        local target_chats="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chats" ] && target_chats=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
         
-        if [ -n "$target_chat" ]; then
+        for chat in $(echo "$target_chats" | tr ',' ' '); do
+            # If notifications are disabled, only notify IDs in ALLOWED_USER_IDS (admin private chats)
+            if [ "$DISABLE_NOTIFICATIONS" = "1" ]; then
+                local is_allowed=0
+                for allowed in $(echo "$ALLOWED_USER_IDS" | tr ',' ' '); do
+                    if [ "$chat" = "$allowed" ]; then
+                        is_allowed=1
+                        break
+                    fi
+                done
+                if [ "$is_allowed" -eq 0 ]; then
+                    continue
+                fi
+            fi
+            
             curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${target_chat}" \
+                --data-urlencode "chat_id=${chat}" \
                 --data-urlencode "text=🔔 *Power Monitor:* $msg" \
                 --data-urlencode "parse_mode=Markdown" >/dev/null &
-        fi
+        done
     fi
 
     # Discord Webhook dispatch
-    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+    if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
         local color=3899126 # Default Cyber Blue
         if echo "$msg" | grep -iqE "awake|online|restored"; then
             color=1095905 # Green
@@ -57,7 +81,9 @@ notify() {
         local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
         local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
         
-        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null &
+        for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
+            curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
+        done
     fi
 }
 
@@ -207,6 +233,7 @@ cleanup() {
     stop_guest_listeners
     # Remove permanent static ARP (return to dynamic ARP)
     ip neigh del "$HOST_IP" dev br-lan 2>/dev/null
+    rm -f "/var/run/power_proxy_daemon.pid" 2>/dev/null
     exit 0
 }
 
