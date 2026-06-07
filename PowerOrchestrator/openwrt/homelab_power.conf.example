@@ -11,8 +11,12 @@ BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
 # e.g. "8881234,9994321". Get yours via @userinfobot or @GetMyIDBot
 ALLOWED_USER_IDS="YOUR_TELEGRAM_USER_ID"
 
-# Optional Target Telegram Chat ID for all wake notifications (can be a user ID or group chat ID).
-# If empty, defaults to the first ID in ALLOWED_USER_IDS. Group IDs typically start with a minus sign (e.g. -100123456).
+# Set to "1" to temporarily suspend all automated Telegram and Discord notifications (e.g. during maintenance)
+DISABLE_NOTIFICATIONS="0"
+
+# Optional Target Telegram Chat ID(s) for all wake notifications (can be user IDs or group chat IDs).
+# Multiple chat IDs can be defined, separated by commas or spaces.
+# If empty, defaults to the first ID in ALLOWED_USER_IDS. Group IDs typically start with a minus sign (e.g., -100123456).
 NOTIFY_CHAT_ID=""
 
 # --- Target Host Configuration ---
@@ -93,8 +97,9 @@ GUEST_PRIVACY_MAP="120:private,122:public"
 ENABLE_PORT_WAKE_LISTENERS="0"
 
 # --- Discord Webhook Notifications (Optional) ---
-# Generate a webhook URL in your Discord App Channel settings to send rich status embeds.
-# e.g., "https://discord.com/api/webhooks/123456789/abcdefgh"
+# Generate one or more webhook URLs in your Discord App Channel settings to send rich status embeds.
+# Multiple webhook URLs can be defined, separated by commas or spaces.
+# e.g., "https://discord.com/api/webhooks/123/abc,https://discord.com/api/webhooks/456/def"
 DISCORD_WEBHOOK_URL=""
 
 # --- Multi-Tenant Guest Waking Security & Naming Maps ---

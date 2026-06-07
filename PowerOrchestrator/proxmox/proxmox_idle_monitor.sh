@@ -52,19 +52,33 @@ notify() {
     
     # Telegram dispatch
     if [ -n "$BOT_TOKEN" ] && [ -n "$ALLOWED_USER_IDS" ]; then
-        local target_chat="${NOTIFY_CHAT_ID}"
-        [ -z "$target_chat" ] && target_chat=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
+        local target_chats="${NOTIFY_CHAT_ID}"
+        [ -z "$target_chats" ] && target_chats=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
         
-        if [ -n "$target_chat" ]; then
+        for chat in $(echo "$target_chats" | tr ',' ' '); do
+            # If notifications are disabled, only notify IDs in ALLOWED_USER_IDS (admin private chats)
+            if [ "$DISABLE_NOTIFICATIONS" = "1" ]; then
+                local is_allowed=0
+                for allowed in $(echo "$ALLOWED_USER_IDS" | tr ',' ' '); do
+                    if [ "$chat" = "$allowed" ]; then
+                        is_allowed=1
+                        break
+                    fi
+                done
+                if [ "$is_allowed" -eq 0 ]; then
+                    continue
+                fi
+            fi
+            
             curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${target_chat}" \
+                --data-urlencode "chat_id=${chat}" \
                 --data-urlencode "text=🔔 *Power Monitor:* $msg" \
                 --data-urlencode "parse_mode=Markdown" >/dev/null &
-        fi
+        done
     fi
 
     # Discord Webhook dispatch
-    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+    if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
         local color=3899126 # Default Cyber Blue
         if echo "$msg" | grep -iqE "awake|online|restored"; then
             color=1095905 # Green
@@ -74,7 +88,9 @@ notify() {
         
         local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
         local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
-        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null &
+        for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
+            curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
+        done
     fi
 }
 
@@ -153,11 +169,42 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
                 [ -z "$sub_proto" ] && sub_proto="tcp"
                 
                 sub_count=0
-                if command -v conntrack >/dev/null 2>&1; then
-                    sub_count=$(conntrack -L -d "$GUEST_IP" -p "$sub_proto" --dport "$sub_port_num" 2>/dev/null | grep -c -E "ESTABLISHED|ASSURED")
-                else
-                    sub_count=$(ss -an | grep -c -E "${GUEST_IP}:${sub_port_num}")
+                # Check based on guest type (LXC vs QEMU VM)
+                if pct status "$VMID" >/dev/null 2>&1; then
+                    # LXC Container: query network namespace directly
+                    sub_count=$(pct exec "$VMID" -- ss -tuan state established 2>/dev/null | grep -c -E ":${sub_port_num}[[:space:]]")
+                    if [ $? -ne 0 ] || [ -z "$sub_count" ] || [ "$sub_count" -eq 0 ]; then
+                        # Fallback: check /proc/net/tcp and /proc/net/udp inside namespace
+                        hex_port=$(printf "%04x" "$sub_port_num")
+                        if [ "$sub_proto" = "tcp" ]; then
+                            sub_count=$(pct exec "$VMID" -- cat /proc/net/tcp 2>/dev/null | awk -v hp="$hex_port" '$3 ~ ":" hp && $4 == "01"' | wc -l)
+                        else
+                            sub_count=$(pct exec "$VMID" -- cat /proc/net/udp 2>/dev/null | awk -v hp="$hex_port" '$3 ~ ":" hp && $4 != "00000000:0000"' | wc -l)
+                        fi
+                    fi
+                elif qm status "$VMID" >/dev/null 2>&1; then
+                    # QEMU VM
+                    # Method A: Check via QEMU Guest Agent (if active)
+                    if qm guest cmd "$VMID" ping >/dev/null 2>&1; then
+                        guest_out=$(qm guest exec "$VMID" -- ss -tuan state established 2>/dev/null)
+                        if [ -n "$guest_out" ]; then
+                            b64_data=$(echo "$guest_out" | grep -oE '"out-data"\s*:\s*"[^"]+"' | cut -d'"' -f4)
+                            if [ -n "$b64_data" ]; then
+                                sub_count=$(echo "$b64_data" | base64 -d 2>/dev/null | grep -c -E ":${sub_port_num}[[:space:]]")
+                            fi
+                        fi
+                    fi
+                    
+                    # Method B: Fallback to capturing L2 packet flows on VM's virtual tap interface
+                    if [ -z "$sub_count" ] || [ "$sub_count" -eq 0 ]; then
+                        if [ -d "/sys/class/net/tap${VMID}i0" ]; then
+                            if timeout 2 tcpdump -i "tap${VMID}i0" -c 1 -p -n "port ${sub_port_num}" >/dev/null 2>&1; then
+                                sub_count=1
+                            fi
+                        fi
+                    fi
                 fi
+                [ -z "$sub_count" ] && sub_count=0
                 CONN_COUNT=$((CONN_COUNT + sub_count))
             done
             
@@ -215,7 +262,7 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
         fi
     done
     
-    echo -e "$NEW_STATES" | sed '/^$/d' > "$STATE_FILE"
+    printf "%s" "$NEW_STATES" | sed '/^$/d' > "$STATE_FILE"
     
     if [ "$ORCHESTRATED_GUESTS_RUNNING" -gt 0 ]; then
         log "BLOCK: Orchestrated guest(s) are still active or waiting for idle timeout. Host is NOT idle."
@@ -232,13 +279,13 @@ for proc in $PROTECTED_PROCESSES; do
 done
 
 # 2. Check CPU Load Average
-# Read 15-minute load average from /proc/loadavg
-LOAD_15=$(awk '{print $3}' /proc/loadavg)
-log "Current 15-minute CPU load average: $LOAD_15 (Threshold: $CPU_THRESHOLD)"
+# Read 1-minute load average from /proc/loadavg
+LOAD_1=$(awk '{print $1}' /proc/loadavg)
+log "Current 1-minute CPU load average: $LOAD_1 (Threshold: $CPU_THRESHOLD)"
 
 # Compare float numbers in bash
-if (( $(echo "$LOAD_15 > $CPU_THRESHOLD" | bc -l) )); then
-    log "BLOCK: CPU load average ($LOAD_15) exceeds threshold ($CPU_THRESHOLD). Host is NOT idle."
+if (( $(echo "$LOAD_1 > $CPU_THRESHOLD" | bc -l) )); then
+    log "BLOCK: CPU load average ($LOAD_1) exceeds threshold ($CPU_THRESHOLD). Host is NOT idle."
     exit 0
 fi
 
@@ -401,6 +448,7 @@ fi
 
 # --- WAKE UP SEQUENCE ---
 log "⚡ WAKE: Proxmox host has woken up from S3 suspend."
+rm -f /tmp/proxmox_guest_idle_states 2>/dev/null
 
 # 7. Resume Suspended Nodes
 # Resume QEMU VMs first (often takes a bit longer to reactivate)
