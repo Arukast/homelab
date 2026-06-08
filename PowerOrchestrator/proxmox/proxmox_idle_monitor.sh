@@ -70,10 +70,10 @@ notify() {
                 fi
             fi
             
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            curl -s --connect-timeout 5 --max-time 10 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                 --data-urlencode "chat_id=${chat}" \
                 --data-urlencode "text=🔔 *Power Monitor:* $msg" \
-                --data-urlencode "parse_mode=Markdown" >/dev/null &
+                --data-urlencode "parse_mode=Markdown" >/dev/null
         done
     fi
 
@@ -89,7 +89,7 @@ notify() {
         local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
         local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
         for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
-            curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
+            curl -s --connect-timeout 5 --max-time 10 -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null
         done
     fi
 }
@@ -425,6 +425,7 @@ if [ "$ACTION" = "shutdown" ]; then
     log "Shutdown: Powering off Proxmox host..."
     notify "🛑 *Proxmox Host Shutting Down:* System is powering off cleanly!"
     sync
+    wait
     sleep 3
     shutdown -h now
     exit 0
@@ -432,12 +433,14 @@ elif [ "$ACTION" = "reboot" ]; then
     log "Reboot: Rebooting Proxmox host..."
     notify "🔄 *Proxmox Host Rebooting:* System is rebooting cleanly!"
     sync
+    wait
     sleep 3
     reboot
     exit 0
 else
     log "Zzz: Suspending Proxmox host to RAM (ACPI S3)..."
     sync
+    wait
     sleep 3
     systemctl suspend
 fi
