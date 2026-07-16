@@ -1,4 +1,4 @@
-# 🔋 Homelab Power-Saving & Idle Orchestration Suite
+# Homelab Power-Saving and Idle Orchestration Suite
 
 A highly optimized, POSIX-native, zero-cloud-dependent idle orchestration and power-saving suite designed for **Proxmox VE** hosts and **OpenWrt** routers. 
 
@@ -6,7 +6,7 @@ This suite enables aggressive power-saving (ACPI S3 Suspend-to-RAM) on high-powe
 
 ---
 
-## 🗺️ Architectural Workflow
+## Architectural Workflow
 
 ```mermaid
 sequenceDiagram
@@ -49,7 +49,7 @@ sequenceDiagram
 
 ---
 
-## 📂 Suite Directory Structure
+## Suite Directory Structure
 
 The suite is modularized into two distinct control zones:
 
@@ -57,30 +57,37 @@ The suite is modularized into two distinct control zones:
 PowerOrchestrator/
 ├── README.md                           # This documentation
 ├── proxmox/                            # Proxmox VE Host Management
-│   ├── homelab_power.conf              # PVE idle detection configuration
 │   ├── proxmox_idle_monitor.sh         # Core idle monitor & guest suspender
 │   ├── proxmox_idle_monitor.service     # Systemd service wrapper
 │   ├── proxmox_idle_monitor.timer       # Systemd timer (10 min schedule)
+│   ├── homelab_ssh_wrapper.sh          # Secure SSH command restrictions wrapper
 │   └── install_proxmox.sh              # PVE automated installer
 └── openwrt/                            # OpenWrt Router Control Plane
     ├── homelab_power.conf              # Bot tokens, IPs, MACs, & redirection ports
+    ├── homelab_power.conf.example      # Template for system configurations
+    ├── homelab_messages.conf           # Customizable Telegram/Discord templates
     ├── telegram_bot_daemon.sh          # POSIX shell long-polling Bot
     ├── telegram_bot.init               # OpenWrt procd Telegram init service
     ├── power_proxy_daemon.sh           # Dynamic firewall, ARP, & state machine
     ├── power_proxy.init                # OpenWrt procd Power Proxy init service
     ├── game_wake_listener.sh           # TCP socket wake-on-demand handler
+    ├── guest_wake_listener.sh          # IP alias/ARP Wake-on-Demand handler for guests
+    ├── homelab_notify.sh               # Centralized Telegram/Discord dispatcher
+    ├── homelab_config_sync.sh          # Config sync and security auditing tool
     ├── install_openwrt.sh              # OpenWrt automated installer
     └── waking_server/                  # uhttpd Landing Page Root
         ├── index.html                  # Premium HTML5/CSS3 glassmorphic UI
         └── cgi-bin/
-            └── status                  # CGI WOL dispatch & status endpoint
+            ├── status                  # CGI WOL dispatch & status endpoint
+            ├── notify                  # CGI receiver for Proxmox notification calls
+            └── utils.sh                # Shared CGI IP parsing/authentication utilities
 ```
 
 ---
 
-## ⚡ Setup & Deployment Instructions
+## Setup and Deployment Instructions
 
-### 🔑 Phase 1: Establish Secure SSH Key Trust
+### Phase 1: Establish Secure SSH Key Trust
 The OpenWrt router needs passwordless access to the Proxmox VE host to safely execute container and VM suspensions.
 
 1. **SSH into your OpenWrt router**:
@@ -114,7 +121,7 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 
 ---
 
-### 🖥️ Phase 2: Deploy to Proxmox VE Host
+### Phase 2: Deploy to Proxmox VE Host
 
 1. **Transfer the Proxmox files**:
    Transfer the `proxmox/` directory of this suite to your Proxmox host (e.g., via SCP):
@@ -127,27 +134,14 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    cd /tmp/proxmox_install
    bash install_proxmox.sh
    ```
-   > [!TIP]
-   > If you customized your `homelab_power.conf` locally on your laptop first, run the installer with the `--force` or `-f` flag to overwrite the active configuration on the host:
-   > ```bash
-   > bash install_proxmox.sh --force
-   > ```
-3. **Configure thresholds**:
-   Edit the configuration file to tailor idle load limits, monitored ports, and network interfaces:
-   ```bash
-   nano /etc/homelab_power.conf
-   ```
-   - **`NET_INTERFACE` / `NET_THRESHOLD_KBPS`**: Set this to monitor average network speed over a 10-second window. Idle hosts will bypass CPU load checks if network throughput remains below the threshold (ideal for high background container density!).
-4. **Test the configuration manually**:
-   You can run a dry-run or force the idle service to execute:
-   ```bash
-   systemctl start proxmox_idle_monitor.service
-   ```
-   *Observe the logs using:* `tail -f /var/log/proxmox_power.log`
+   *Note: This automatically registers the systemd services and places `proxmox_idle_monitor.sh` and `homelab_ssh_wrapper.sh` in `/usr/local/bin/`.*
+
+3. **Deploy Configuration**:
+   Do not edit or create `/etc/homelab_power.conf` manually on the Proxmox host. The configuration is managed entirely on the OpenWrt router as the single source of truth and deployed to Proxmox VE automatically in **Phase 3** using the synchronization tool.
 
 ---
 
-### 📶 Phase 3: Deploy to OpenWrt Router (Supports 23.05+ and 24.x APK)
+### Phase 3: Deploy to OpenWrt Router (Supports 23.05+ and 24.x APK)
 
 1. **Transfer the OpenWrt files**:
    Transfer the `openwrt/` directory to the router's `/tmp` directory:
@@ -167,19 +161,37 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    > ```bash
    > sh install_openwrt.sh --force
    > ```
-3. **Configure Bot Credentials & IPs**:
-   Open `/etc/homelab_power.conf` and populate it with your Telegram details:
+
+3. **Configure Credentials, IPs, and Custom Messages**:
+   - Edit the system configuration on the router:
+     ```bash
+     nano /etc/homelab_power.conf
+     ```
+     Ensure you set:
+     - `BOT_TOKEN`
+     - `ALLOWED_USER_IDS`
+     - `HOST_IP` (e.g., `192.168.11.10`)
+     - `HOST_MAC` (The actual physical MAC address of Proxmox NIC)
+     - `GAME_REDIRECT_PORTS` (Supports protocol suffix, e.g. `25565,19132/udp,27015/udp,27016/udp` for Minecraft Java/Bedrock and Unturned Steam query/game ports).
+     - `DISCORD_WEBHOOK_URL` (Optional: Comma-separated list of Discord Webhook URLs for status updates).
+   - Custom notifications are configured in:
+     ```bash
+     nano /etc/homelab_messages.conf
+     ```
+
+4. **Synchronize Configuration and Test SSH Trust**:
+   To push the configuration to your Proxmox host and confirm passwordless trust as well as SSH wrapper restrictions, execute the synchronization tool:
    ```bash
-   nano /etc/homelab_power.conf
+   homelab_config_sync.sh
    ```
-   Ensure you set:
-   * `BOT_TOKEN`
-   * `ALLOWED_USER_IDS`
-   * `HOST_IP` (e.g., `192.168.11.10`)
-   * `HOST_MAC` (The actual physical MAC address of Proxmox NIC)
-   * `GAME_REDIRECT_PORTS` (Supports protocol suffix, e.g. `25565,19132/udp,27015/udp,27016/udp` for Minecraft Java/Bedrock and Unturned Steam query/game ports).
-4. **Restart Daemon Services**:
-   Restart the services to load the new credentials:
+   This will:
+   - Verify permissions of the router's Dropbear SSH private key (chmod 600).
+   - Audit the connection to the Proxmox host and ensure the security wrapper is active.
+   - Generate a sanitized version of the configuration file (excluding router/bot secrets) and push it to Proxmox.
+   - Restart the Proxmox idle monitor service timer automatically.
+
+5. **Restart Daemon Services**:
+   Restart the services to load the new configurations:
    ```bash
    /etc/init.d/power_proxy restart
    /etc/init.d/telegram_bot restart
@@ -187,26 +199,27 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 
 ---
 
-## 🚀 Phase 4: Multi-Guest Dynamic Auto-Sleep & Auto-Wake Orchestrator
+## Phase 4: Multi-Guest Dynamic Auto-Sleep and Auto-Wake Orchestrator
 
 If you want to run multiple heavy services but dynamically reclaim their memory and CPU cores when not in use:
 
-1. **Configure your guest maps** in `/etc/homelab_power.conf` on **both** Proxmox and OpenWrt:
+1. **Configure your guest maps** in `/etc/homelab_power.conf` on your OpenWrt router:
    ```ini
    # Format: "VMID:IP_ADDRESS:PORT/PROTOCOL:IDLE_MINUTES"
    # PROTOCOL can be 'tcp' or 'udp'
    GUEST_ORCHESTRATION_MAP="101:192.168.11.50:25565/tcp:15,102:192.168.11.60:19132/udp:15"
    ```
-2. **Push the configurations** with the `--force` flag on both hosts to apply the update.
+2. **Push the configuration** to Proxmox VE by executing the configuration sync tool on your router:
+   ```bash
+   homelab_config_sync.sh
+   ```
 3. **Dynamic Operation**:
    - **Auto-Suspend**: If a guest (e.g. VM `101`) has 0 active clients on its port for 15 minutes, Proxmox suspends it, returning **100% of its RAM and CPU cores** back to the resource pool!
-   - **Auto-Wake on Demand**: When a client connects to the guest's IP (`192.168.11.50`), your OpenWrt router intercepts the connection attempt, sends a secure Dropbear SSH command to Proxmox (`qm resume 101`), and restores the VM instantly. The client connects transparently!
+   - **Auto-Wake on Demand**: When a client connects to the guest's IP (`192.168.11.50`), your OpenWrt router intercepts the connection attempt via `guest_wake_listener.sh` (using dynamic ARP/IP alias binding), sends a secure Dropbear SSH command to Proxmox (`qm resume 101`), and restores the VM instantly. The client connects transparently!
 
 ---
 
----
-
-## 🎨 Phase 5: Unified Glassmorphic Portal Dashboard & Optional Passcodes
+## Phase 5: Unified Glassmorphic Portal Dashboard and Optional Passcodes
 
 The landing page features a **dual-mode engine** that adapts dynamically depending on how it is accessed:
 
@@ -225,7 +238,7 @@ Perfect for directing friends directly to a single game server without exposing 
 
 ---
 
-## 🔒 Advanced Security, Privacy & Anti-DDoS
+## Advanced Security, Privacy and Anti-DDoS
 
 ### 1. Privacy Isolation (Private vs. Public)
 Hide sensitive private UIs (like your Home Assistant or NAS) from gaming friends!
@@ -234,19 +247,17 @@ Hide sensitive private UIs (like your Home Assistant or NAS) from gaming friends
 * Trusted IPs see **all services**; external visitors (friends/public funnel) see **only public services** (private ones are completely hidden from the grid).
 * Message descriptions and passwords (from `GUEST_MESSAGE_MAP`) are strictly omitted from JSON payloads until the correct passcode is successfully entered.
 
-### 2. Native DDoS Guard & Cooldown Block
+### 2. Native DDoS Guard and Cooldown Block
 Exposing status queries to the public via Tailscale Funnel poses trigger spam risks. The router implements a dual-layer defender:
 * **IP Rate Limiting**: Client IP requests are tracked in RAM-based filesystem `/tmp/status_rate_limit/`. If a client spams the status queries (exceeding 1 query per 3 seconds), they are instantly blocked with a lightweight JSON warning.
 * **WoL Cooldown Lock**: A global `/tmp/wol_cooldown_lock` enforces a **60-second cooldown** between Wake-on-LAN and guest start SSH dispatches, completely blocking spam at the core and safeguarding your hardware.
 
 ### 3. UDP Connection Tracking on Proxmox
-Monitored ports now support protocol suffixes (e.g. `MONITORED_PORTS="22,25565/tcp,19132/udp"`). The idle script queries kernel `conntrack` (with native `ss` fallback) to monitor active UDP gaming streams (like Minecraft Bedrock, Valheim, or Unturned), preventing premature host suspension during live sessions.
+Monitored ports support protocol suffixes (e.g. `MONITORED_PORTS="22,25565/tcp,19132/udp"`). The idle script queries kernel `conntrack` (with native `ss` fallback) to monitor active UDP gaming streams (like Minecraft Bedrock, Valheim, or Unturned), preventing premature host suspension during live sessions.
 
 ---
 
----
-
-## 🛠️ Verification & Operations Guide
+## Verification and Operations Guide
 
 ### How to verify ACPI S3 capability on Proxmox:
 Before trusting the script, verify that your server is capable of waking up successfully from S3 Suspend:
@@ -256,12 +267,12 @@ rtcwake -m mem -s 30
 ```
 If the host successfully sleeps and resumes keyboard, network, and disk states after 30 seconds, your hardware supports S3 flawlessly!
 
-### 🤖 Telegram Bot Control & Commands
+### Telegram Bot Control and Commands
 
 Once active, search for your bot in Telegram and start interacting.
 
 #### Available Commands:
-* **⚡ Host Power Control**:
+* **Host Power Control**:
   * `/status` - Check host power (ONLINE/OFFLINE), PVE resource status (CPU Load, RAM Usage), and guest counts.
   * `/wake` - Forcefully wake the Proxmox host using Wake-on-LAN (Magic Packet).
   * `/sleep` - Safely suspend guest nodes and sleep the host (checks for idle criteria).
@@ -270,7 +281,7 @@ Once active, search for your bot in Telegram and start interacting.
   * `/hostshutdownforce` - Immediately stop/suspend guest nodes and shut down the host.
   * `/hostreboot` - Safely reboot the Proxmox host (blocks if non-exempt guests are running).
   * `/hostrebootforce` - Immediately stop/suspend guest nodes and reboot the host.
-* **🖥️ Guest Node Control**:
+* **Guest Node Control**:
   * `/list` - List all LXC containers and QEMU VMs with their status (running/stopped).
   * `/ctstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
   * `/ctstop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
@@ -282,7 +293,7 @@ Once active, search for your bot in Telegram and start interacting.
 > * **Manual Safe Actions:** `/sleep`, `/hostshutdown`, and `/hostreboot` verify safety criteria (such as blocking if active non-exempt guest nodes are running) before triggering.
 > * **Manual Forced Actions:** Commands ending in `force` (like `/sleepforce`, `/hostshutdownforce`, `/hostrebootforce`) **bypass all safety/idle criteria** to immediately suspends/stop guests and trigger the power state changes.
 
-#### ⚙️ Registering Commands with BotFather:
+#### Registering Commands with BotFather:
 To enable the auto-completion menu for commands in Telegram:
 1. Message **[@BotFather](https://t.me/BotFather)** on Telegram.
 2. Send `/setcommands` and choose your Homelab Bot.
@@ -290,7 +301,7 @@ To enable the auto-completion menu for commands in Telegram:
    ```text
    status - Check host power and PVE resource status
    wake - Wake the Proxmox host (Wake-on-LAN)
-   sleep - Safely sleep host (respects idle rules)
+   sleep - Safe sleep (respects idle rules)
    sleepforce - Force host to sleep immediately
    hostshutdown - Safe graceful shutdown
    hostshutdownforce - Force shutdown immediately
@@ -304,7 +315,7 @@ To enable the auto-completion menu for commands in Telegram:
 
 ---
 
-## 🔒 Security Protocols & Best Practices
+## Security Protocols and Best Practices
 
 1. **Strict Admin Verification**:
    The Telegram daemon cross-references every single update's sender ID with the `ALLOWED_USER_IDS` in `/etc/homelab_power.conf`. Requests from unauthorized users are immediately dropped and reported to the main administrator.
