@@ -35,6 +35,102 @@ if [ -f "$MSG_CONF" ]; then
     source "$MSG_CONF"
 fi
 
+# --- Smart Wake Scheduling Helpers ---
+day_to_num() {
+    case "$1" in
+        Mon) echo 1 ;;
+        Tue) echo 2 ;;
+        Wed) echo 3 ;;
+        Thu) echo 4 ;;
+        Fri) echo 5 ;;
+        Sat) echo 6 ;;
+        Sun) echo 7 ;;
+        *) echo 0 ;;
+    esac
+}
+
+is_in_active_window() {
+    [ -z "$ACTIVE_TIME_WINDOWS" ] && return 1
+    
+    local curr_day=$(date +%a)
+    local curr_day_num=$(day_to_num "$curr_day")
+    local curr_hour=$(date +%H)
+    local curr_min=$(date +%M)
+    
+    # Strip leading zeros
+    curr_hour=${curr_hour#0}
+    curr_min=${curr_min#0}
+    local curr_time_m=$(( (curr_hour ? curr_hour : 0) * 60 + (curr_min ? curr_min : 0) ))
+    
+    for window in $(echo "$ACTIVE_TIME_WINDOWS" | tr ',' ' '); do
+        local days=""
+        local times=""
+        if echo "$window" | grep -q ":"; then
+            days=$(echo "$window" | cut -d':' -f1)
+            times=$(echo "$window" | cut -d':' -f2)
+        else
+            days="All"
+            times="$window"
+        fi
+        
+        # Check day match
+        local day_match=0
+        if [ "$days" = "All" ]; then
+            day_match=1
+        elif echo "$days" | grep -q "-"; then
+            local start_day=$(echo "$days" | cut -d'-' -f1)
+            local end_day=$(echo "$days" | cut -d'-' -f2)
+            local start_num=$(day_to_num "$start_day")
+            local end_num=$(day_to_num "$end_day")
+            
+            if [ "$start_num" -le "$end_num" ]; then
+                if [ "$curr_day_num" -ge "$start_num" ] && [ "$curr_day_num" -le "$end_num" ]; then
+                    day_match=1
+                fi
+            else
+                if [ "$curr_day_num" -ge "$start_num" ] || [ "$curr_day_num" -le "$end_num" ]; then
+                    day_match=1
+                fi
+            fi
+        else
+            if [ "$curr_day" = "$days" ]; then
+                day_match=1
+            fi
+        fi
+        
+        [ "$day_match" -eq 0 ] && continue
+        
+        # Parse time range
+        local start_t=$(echo "$times" | cut -d'-' -f1)
+        local end_t=$(echo "$times" | cut -d'-' -f2)
+        
+        local sh=$(echo "$start_t" | cut -d':' -f1)
+        local sm=$(echo "$start_t" | cut -d':' -f2)
+        local eh=$(echo "$end_t" | cut -d':' -f1)
+        local em=$(echo "$end_t" | cut -d':' -f2)
+        
+        sh=${sh#0}
+        sm=${sm#0}
+        eh=${eh#0}
+        em=${em#0}
+        
+        local start_m=$(( (sh ? sh : 0) * 60 + (sm ? sm : 0) ))
+        local end_m=$(( (eh ? eh : 0) * 60 + (em ? em : 0) ))
+        
+        if [ "$end_m" -lt "$start_m" ]; then
+            if [ "$curr_time_m" -ge "$start_m" ] || [ "$curr_time_m" -le "$end_m" ]; then
+                return 0
+            fi
+        else
+            if [ "$curr_time_m" -ge "$start_m" ] && [ "$curr_time_m" -le "$end_m" ]; then
+                return 0
+            fi
+        fi
+    done
+    
+    return 1
+}
+
 # Log helper
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -50,47 +146,10 @@ notify() {
     local msg="$1"
     log "NOTIFICATION: $msg"
     
-    # Telegram dispatch
-    if [ -n "$BOT_TOKEN" ] && [ -n "$ALLOWED_USER_IDS" ]; then
-        local target_chats="${NOTIFY_CHAT_ID}"
-        [ -z "$target_chats" ] && target_chats=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-        
-        for chat in $(echo "$target_chats" | tr ',' ' '); do
-            # If notifications are disabled, only notify IDs in ALLOWED_USER_IDS (admin private chats)
-            if [ "$DISABLE_NOTIFICATIONS" = "1" ]; then
-                local is_allowed=0
-                for allowed in $(echo "$ALLOWED_USER_IDS" | tr ',' ' '); do
-                    if [ "$chat" = "$allowed" ]; then
-                        is_allowed=1
-                        break
-                    fi
-                done
-                if [ "$is_allowed" -eq 0 ]; then
-                    continue
-                fi
-            fi
-            
-            curl -s --connect-timeout 5 --max-time 10 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${chat}" \
-                --data-urlencode "text=🔔 *Power Monitor:* $msg" \
-                --data-urlencode "parse_mode=Markdown" >/dev/null
-        done
-    fi
-
-    # Discord Webhook dispatch
-    if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
-        local color=3899126 # Default Cyber Blue
-        if echo "$msg" | grep -iqE "awake|online|restored"; then
-            color=1095905 # Green
-        elif echo "$msg" | grep -iqE "sleep|S3|offline|down|shutdown|suspended|stopped"; then
-            color=15680580 # Red
-        fi
-        
-        local clean_msg=$(echo "$msg" | sed 's/"/\\"/g')
-        local payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
-        for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
-            curl -s --connect-timeout 5 --max-time 10 -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null
-        done
+    if [ -n "$NOTIFICATION_URL" ]; then
+        curl -s --connect-timeout 2 --max-time 5 -X POST \
+            --data-urlencode "msg=$msg" \
+            "$NOTIFICATION_URL" >/dev/null &
     fi
 }
 
@@ -130,6 +189,10 @@ fi
 
 # Run activity and idle checks only if not forced
 if [ "$FORCE_SLEEP" -eq 0 ]; then
+    if is_in_active_window; then
+        log "ACTIVE SCHEDULE: Current time is within scheduled awake window ($ACTIVE_TIME_WINDOWS). Skipping sleep checks."
+        exit 0
+    fi
 
 # 0. Individual Guest Auto-Sleep Check
 if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then

@@ -53,13 +53,20 @@ expand_msg() {
 send_message() {
     local chat_id="$1"
     local text="$2"
+    local markup="$3"
     
-    # URL encode the text using a simple sed/hexdump parser if needed, 
-    # but curl --data-urlencode is native and handles everything perfectly!
-    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-        --data-urlencode "chat_id=${chat_id}" \
-        --data-urlencode "text=${text}" \
-        --data-urlencode "parse_mode=Markdown" >/dev/null
+    if [ -n "$markup" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "text=${text}" \
+            --data-urlencode "parse_mode=Markdown" \
+            --data-urlencode "reply_markup=${markup}" >/dev/null
+    else
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "text=${text}" \
+            --data-urlencode "parse_mode=Markdown" >/dev/null
+    fi
 }
 
 # Main Command Processor
@@ -75,14 +82,21 @@ process_command() {
     
     case "$action" in
         /start|/help)
-            send_message "$chat_id" "$MSG_BOT_HELP"
+            local markup='{"inline_keyboard":[
+                [{"text":"🔍 Status","callback_data":"/status"},{"text":"🖥️ List VMs","callback_data":"/list"}],
+                [{"text":"⚡ Wake Host","callback_data":"/wake"},{"text":"💤 Sleep (Safe)","callback_data":"/sleep"}]
+            ]}'
+            send_message "$chat_id" "$MSG_BOT_HELP" "$markup"
             ;;
             
         /status)
             send_message "$chat_id" "$MSG_BOT_QUERY_STATUS"
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")"
+                local markup='{"inline_keyboard":[
+                    [{"text":"⚡ Wake Host","callback_data":"/wake"},{"text":"🔄 Refresh","callback_data":"/status"}]
+                ]}'
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")" "$markup"
                 return
             fi
             
@@ -108,10 +122,13 @@ process_command() {
 
 🖥️ *Guest Nodes:*
 • LXC Containers: ${lxc_running}/${lxc_count} running
-• QEMU VMs: ${vm_running}/${vm_count} running
+• QEMU VMs: ${vm_running}/${vm_count} running"
 
-👉 Send \`/list\` to view all virtual machines and containers."
-            send_message "$chat_id" "$status_msg"
+            local markup='{"inline_keyboard":[
+                [{"text":"🖥️ List VMs","callback_data":"/list"},{"text":"💤 Sleep (Safe)","callback_data":"/sleep"}],
+                [{"text":"🔄 Refresh","callback_data":"/status"}]
+            ]}'
+            send_message "$chat_id" "$status_msg" "$markup"
             ;;
             
         /wake)
@@ -259,7 +276,37 @@ ${lxcs}
  
 🎮 *Virtual Machines:*
 ${vms}"
-            send_message "$chat_id" "$list_msg"
+            
+            local lxc_buttons=$($SSH_CMD "pct list" 2>/dev/null | awk 'NR>1 {
+                vmid = $1; status = $2; name = $3;
+                btn_text = (status == "running" ? "🛑 Stop " name : "🚀 Start " name);
+                cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
+                printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
+            }' | paste -sd, -)
+            
+            local vm_buttons=$($SSH_CMD "qm list" 2>/dev/null | awk 'NR>1 {
+                vmid = $1; name = $2; status = $3;
+                btn_text = (status == "running" ? "🛑 Stop " name : "🚀 Start " name);
+                cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
+                printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
+            }' | paste -sd, -)
+            
+            local all_buttons=""
+            if [ -n "$lxc_buttons" ] && [ -n "$vm_buttons" ]; then
+                all_buttons="${lxc_buttons},${vm_buttons}"
+            elif [ -n "$lxc_buttons" ]; then
+                all_buttons="$lxc_buttons"
+            else
+                all_buttons="$vm_buttons"
+            fi
+            
+            local markup=""
+            if [ -n "$all_buttons" ]; then
+                all_buttons="${all_buttons},[{\"text\":\"🔄 Refresh List\",\"callback_data\":\"/list\"}]"
+                markup="{\"inline_keyboard\":[$all_buttons]}"
+            fi
+            
+            send_message "$chat_id" "$list_msg" "$markup"
             ;;
             
         /ctstart)
@@ -424,9 +471,19 @@ while true; do
     i=0
     while [ $i -lt $COUNT ]; do
         UPDATE_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].update_id")
+        
+        # Try to parse normal message
         USER_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.from.id")
         CHAT_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.chat.id")
         CMD_TEXT=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.text")
+        CALLBACK_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.id")
+        
+        # Fall back to callback query values if present
+        if [ -n "$CALLBACK_ID" ]; then
+            USER_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.from.id")
+            CHAT_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.message.chat.id")
+            CMD_TEXT=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.data")
+        fi
         
         # Advance offset to acknowledge this update safely (preventing empty string shell errors)
         if [ -n "$UPDATE_ID" ] && echo "$UPDATE_ID" | grep -qE "^[0-9]+$"; then
@@ -464,6 +521,12 @@ while true; do
                     fi
                 fi
             fi
+        fi
+        
+        # Acknowledge callback query if it was one
+        if [ -n "$CALLBACK_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery" \
+                --data-urlencode "callback_query_id=${CALLBACK_ID}" >/dev/null &
         fi
         
         i=$((i + 1))

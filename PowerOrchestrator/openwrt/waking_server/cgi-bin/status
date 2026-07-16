@@ -145,52 +145,9 @@ if [ "$BYPASS_RATE_LIMIT" -eq 0 ]; then
 fi
 echo "$CURRENT_TIME" > "$IP_FILE"
 
-# --- Telegram Notification Helper (Async) ---
-notify_telegram() {
-    local text="$1"
-    if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-        local target_chats="${NOTIFY_CHAT_ID}"
-        [ -z "$target_chats" ] && target_chats=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-        
-        for chat in $(echo "$target_chats" | tr ',' ' '); do
-            # If notifications are disabled, only notify IDs in ALLOWED_USER_IDS (admin private chats)
-            if [ "$DISABLE_NOTIFICATIONS" = "1" ]; then
-                local is_allowed=0
-                for allowed in $(echo "$ALLOWED_USER_IDS" | tr ',' ' '); do
-                    if [ "$chat" = "$allowed" ]; then
-                        is_allowed=1
-                        break
-                    fi
-                done
-                if [ "$is_allowed" -eq 0 ]; then
-                    continue
-                fi
-            fi
-            
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-                --data-urlencode "chat_id=${chat}" \
-                --data-urlencode "text=${text}" \
-                --data-urlencode "parse_mode=Markdown" >/dev/null &
-        done
-    fi
-}
-
-# --- Discord Notification Helper (Async) ---
-notify_discord() {
-    local text="$1"
-    if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
-        local color=3899126 # Default Cyber Blue
-        if echo "$text" | grep -iqE "awake|online|restored|success"; then
-            color=1095905 # Green
-        elif echo "$text" | grep -iqE "sleep|S3|offline|down|shutdown"; then
-            color=15680580 # Red
-        fi
-        local clean_txt=$(echo "$text" | sed 's/"/\\"/g')
-        local payload="{\"embeds\":[{\"title\":\"🔔 Homelab Portal Notification\",\"description\":\"${clean_txt}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
-        for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
-            curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
-        done
-    fi
+# --- Centralized Notification Helper (Async) ---
+notify() {
+    /usr/bin/homelab_notify.sh "$1" &
 }
 
 # --- Rate-Limit / Global WoL Cooldown Lock ---
@@ -288,11 +245,72 @@ if [ -z "$VMID" ]; then
     GUEST_CODES_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^guest_codes=" | cut -d'=' -f2- 2>/dev/null)
     GUEST_CODES=$(url_decode "$GUEST_CODES_RAW")
     
+    local metrics=""
+    local cpu=""
+    local ram_used=""
+    local ram_total=""
+    local temp=""
+    local disk=""
+    
+    if [ "$HOST_STATUS" = "online" ]; then
+        CACHE_FILE="/tmp/homelab_metrics_cache"
+        CACHE_VALID=0
+        if [ -f "$CACHE_FILE" ]; then
+            local now=$(date +%s)
+            local cache_time=$(head -n 1 "$CACHE_FILE" 2>/dev/null)
+            if echo "$cache_time" | grep -qE "^[0-9]+$"; then
+                if [ $((now - cache_time)) -lt 10 ]; then
+                    metrics=$(tail -n +2 "$CACHE_FILE" 2>/dev/null)
+                    CACHE_VALID=1
+                fi
+            fi
+        fi
+        
+        if [ "$CACHE_VALID" -eq 0 ]; then
+            metrics=$($SSH_CMD "cpu=\$(grep 'cpu ' /proc/stat | awk '{usage=(\$2+\$4)*100/(\$2+\$4+\$5)} END {printf \"%.1f\", usage}'); ram=\$(free -m | awk 'NR==2 {printf \"%d:%d\", \$3, \$2}'); temp=\$(for z in /sys/class/thermal/thermal_zone*; do [ -f \"\$z/temp\" ] && read -r t < \"\$z/temp\" && read -r y < \"\$z/type\" && echo \"\$y:\$t\" || true; done | grep -iE 'pkg|cpu|soc' | head -n 1 | cut -d: -f2); [ -z \"\$temp\" ] && temp=\$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null); [ -z \"\$temp\" ] && temp=0; temp=\$((temp/1000)); disk=\$(df -h / | awk 'NR==2 {print \$5}' | tr -d '%'); echo \"\$cpu|\$ram|\$temp|\$disk\"" 2>/dev/null)
+            if [ -n "$metrics" ]; then
+                (echo "$(date +%s)"; echo "$metrics") > "$CACHE_FILE"
+            fi
+        fi
+        
+        if [ -n "$metrics" ]; then
+            cpu=$(echo "$metrics" | cut -d'|' -f1)
+            local ram_raw=$(echo "$metrics" | cut -d'|' -f2)
+            temp=$(echo "$metrics" | cut -d'|' -f3)
+            disk=$(echo "$metrics" | cut -d'|' -f4)
+            
+            ram_used=$(echo "$ram_raw" | cut -d':' -f1)
+            ram_total=$(echo "$ram_raw" | cut -d':' -f2)
+        fi
+    fi
+    
     echo "{"
     echo "  \"status\": \"online\","
     echo "  \"is_private\": ${USER_IS_PRIVATE},"
-    echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\"},"
+    if [ "$HOST_STATUS" = "online" ] && [ -n "$cpu" ]; then
+        echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\", \"cpu\": ${cpu}, \"ram_used\": ${ram_used}, \"ram_total\": ${ram_total}, \"temp\": ${temp}, \"disk\": ${disk}},"
+    else
+        echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\"},"
+    fi
     echo "  \"guests\": ["
+    
+    # Pre-ping all guests in parallel to avoid sequential delay bottleneck
+    if [ "$HOST_STATUS" = "online" ]; then
+        for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
+            g_vmid=$(echo "$entry" | cut -d':' -f1)
+            g_ip=$(echo "$entry" | cut -d':' -f2)
+            if [ -n "$g_ip" ]; then
+                (
+                    if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
+                        echo "1" > "/tmp/ping_vmid_${g_vmid}"
+                    else
+                        echo "0" > "/tmp/ping_vmid_${g_vmid}"
+                    fi
+                ) &
+            fi
+        done
+        wait
+    fi
     
     # Loop through configured guest map
     first=1
@@ -317,8 +335,15 @@ if [ -z "$VMID" ]; then
         [ -z "$g_port" ] && g_port=""
         
         g_online=0
-        if [ "$HOST_STATUS" = "online" ] && ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
-            g_online=1
+        if [ "$HOST_STATUS" = "online" ]; then
+            if [ -f "/tmp/ping_vmid_${g_vmid}" ]; then
+                g_online=$(cat "/tmp/ping_vmid_${g_vmid}")
+                rm -f "/tmp/ping_vmid_${g_vmid}"
+            else
+                if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
+                    g_online=1
+                fi
+            fi
         fi
         
         g_passcode=$(echo "$GUEST_PASSCODE_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
@@ -451,11 +476,9 @@ echo "$CURRENT_TIME" > "/tmp/waking_vmid_${VMID}"
 
 # Log notifications
 if ! is_host_online; then
-    notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
-    notify_discord "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
+    notify "$(eval echo "\"$MSG_WEB_WAKE_GUEST_WAKING_HOST\"")"
 else
-    notify_telegram "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
-    notify_discord "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
+    notify "$(eval echo "\"$MSG_WEB_WAKE_GUEST\"")"
 fi
 
 # WOL Host
@@ -484,8 +507,7 @@ SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
         while [ $max_retries -gt 0 ]; do
             if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
                 rm -f "/tmp/waking_vmid_${VMID}"
-                notify_telegram "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
-                notify_discord "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
+                notify "$(eval echo "\"$MSG_WEB_GUEST_AWAKE\"")"
                 break
             fi
             sleep 5

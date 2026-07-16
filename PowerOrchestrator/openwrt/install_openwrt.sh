@@ -84,11 +84,15 @@ cp telegram_bot_daemon.sh /usr/bin/telegram_bot_daemon.sh
 cp power_proxy_daemon.sh /usr/bin/power_proxy_daemon.sh
 cp game_wake_listener.sh /usr/bin/game_wake_listener.sh
 cp guest_wake_listener.sh /usr/bin/guest_wake_listener.sh
+cp homelab_notify.sh /usr/bin/homelab_notify.sh
+cp homelab_config_sync.sh /usr/bin/homelab_config_sync.sh
 
 chmod +x /usr/bin/telegram_bot_daemon.sh
 chmod +x /usr/bin/power_proxy_daemon.sh
 chmod +x /usr/bin/game_wake_listener.sh
 chmod +x /usr/bin/guest_wake_listener.sh
+chmod +x /usr/bin/homelab_notify.sh
+chmod +x /usr/bin/homelab_config_sync.sh
 
 echo "Scripts installed to /usr/bin/."
 
@@ -98,7 +102,9 @@ mkdir -p /www_waking/cgi-bin
 
 cp waking_server/index.html /www_waking/index.html
 cp waking_server/cgi-bin/status /www_waking/cgi-bin/status
+cp waking_server/cgi-bin/notify /www_waking/cgi-bin/notify
 chmod +x /www_waking/cgi-bin/status
+chmod +x /www_waking/cgi-bin/notify
 
 echo "Waking server deployed to /www_waking."
 
@@ -159,14 +165,43 @@ chmod +x /etc/init.d/power_proxy
 /etc/init.d/power_proxy start
 /etc/init.d/telegram_bot start
 
+# 7. Post-install Dropbear SSH Trust verification
+echo "===================================================="
+echo "Checking SSH Key and Security Wrapper setup...      "
+echo "===================================================="
+SSH_KEY_PATH="/etc/dropbear/id_dropbear"
+if [ ! -f "$SSH_KEY_PATH" ]; then
+    echo "⚠️  SSH key not found at $SSH_KEY_PATH!"
+    echo "Generating new Dropbear key..."
+    mkdir -p /etc/dropbear
+    dropbearkey -t rsa -f "$SSH_KEY_PATH"
+fi
+
+# Load config to get host IP
+if [ -f "/etc/homelab_power.conf" ]; then
+    . "/etc/homelab_power.conf"
+fi
+
+if [ -n "$HOST_IP" ] && [ "$HOST_IP" != "192.168.11.10" ]; then
+    echo "Attempting to verify SSH connectivity and wrapper on Proxmox ($HOST_IP)..."
+    if /usr/bin/homelab_config_sync.sh; then
+        echo "✅ Sync and verification succeeded!"
+    else
+        echo "⚠️  Verification warning/failure. Please check SSH keys and host connectivity."
+    fi
+else
+    echo "💡 HOST_IP is still default. Skipping automatic connection tests."
+    echo "Once you edit /etc/homelab_power.conf, you can sync config and verify security by running:"
+    echo "👉 homelab_config_sync.sh"
+fi
+
 echo "===================================================="
 echo "Installation Successful!                            "
 echo "===================================================="
 echo "Next Steps:"
 echo "1. Edit values and bot token in: /etc/homelab_power.conf"
 echo "2. Copy OpenWrt public key to Proxmox root's authorized_keys:"
-echo "   (Ensure passwordless Dropbear SSH is fully working)"
-echo "3. Restart services to apply conf edits:"
-echo "   /etc/init.d/power_proxy restart"
-echo "   /etc/init.d/telegram_bot restart"
+echo "   Get public key by running:"
+echo "   dropbearkey -y -f /etc/dropbear/id_dropbear"
+echo "3. Run 'homelab_config_sync.sh' to sync configs and test SSH connection!"
 echo "===================================================="

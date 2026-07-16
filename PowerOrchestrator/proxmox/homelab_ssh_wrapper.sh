@@ -75,6 +75,29 @@ case "$SSH_ORIGINAL_COMMAND" in
         nohup /usr/local/bin/proxmox_idle_monitor.sh --reboot --force >/dev/null 2>&1 &
         exit 0
         ;;
+
+    "cat > /etc/homelab_power.conf")
+        cat > /etc/homelab_power.conf
+        exit 0
+        ;;
+
+    "systemctl restart proxmox_idle_monitor.timer")
+        systemctl restart proxmox_idle_monitor.timer
+        exit 0
+        ;;
+
+    "cpu=\$(grep 'cpu ' /proc/stat | awk '{usage=(\$2+\$4)*100/(\$2+\$4+\$5)} END {printf \"%.1f\", usage}'); ram=\$(free -m | awk 'NR==2 {printf \"%d:%d\", \$3, \$2}'); temp=\$(for z in /sys/class/thermal/thermal_zone*; do [ -f \"\$z/temp\" ] && read -r t < \"\$z/temp\" && read -r y < \"\$z/type\" && echo \"\$y:\$t\" || true; done | grep -iE 'pkg|cpu|soc' | head -n 1 | cut -d: -f2); [ -z \"\$temp\" ] && temp=\$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null); [ -z \"\$temp\" ] && temp=0; temp=\$((temp/1000)); disk=\$(df -h / | awk 'NR==2 {print \$5}' | tr -d '%'); echo \"\$cpu|\$ram|\$temp|\$disk\"" | \
+    "cpu=\$(grep 'cpu ' /proc/stat | awk '{usage=(\$2+\$4)*100/(\$2+\$4+\$5)} END {printf \"%.1f\", usage}'); ram=\$(free -m | awk 'NR==2 {printf \"%d:%d\", \$3, \$2}'); temp=\$(for z in /sys/class/thermal/thermal_zone*; do [ -f \"\$z/temp\" ] && read -r t < \"\$z/temp\" && read -r y < \"\$z/type\" && echo \"\$y:\$t\" || true; done | grep -iE 'pkg|cpu|soc' | head -n 1 | cut -d: -f2); [ -z \"\$temp\" ] && temp=\$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null); [ -z \"\$temp\" ] && temp=0; temp=\$((temp/1000)); disk=\$(df -h / | awk 'NR==2 {print \$5}' | tr -d '%'); echo \"\$cpu|\$ram|\$temp|\$disk\"")
+        cpu=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.1f", usage}')
+        ram=$(free -m | awk 'NR==2 {printf "%d:%d", $3, $2}')
+        temp=$(for z in /sys/class/thermal/thermal_zone*; do [ -f "$z/temp" ] && read -r t < "$z/temp" && read -r y < "$z/type" && echo "$y:$t" || true; done | grep -iE 'pkg|cpu|soc' | head -n 1 | cut -d: -f2)
+        [ -z "$temp" ] && temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+        [ -z "$temp" ] && temp=0
+        temp=$((temp/1000))
+        disk=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%')
+        echo "$cpu|$ram|$temp|$disk"
+        exit 0
+        ;;
 esac
 
 # --- 2. Match Dynamic Multi-line config and resume command blocks ---
