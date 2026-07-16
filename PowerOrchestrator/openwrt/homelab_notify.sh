@@ -58,7 +58,7 @@ if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
     fi
     
     clean_msg=$(echo "$MSG" | sed 's/"/\\"/g')
-    payload="{\"embeds\":[{\"title\":\"🔔 Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
+    payload="{\"embeds\":[{\"title\":\"Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
     
     for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
         curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
