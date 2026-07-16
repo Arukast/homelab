@@ -144,14 +144,15 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 ### Phase 3: Deploy to OpenWrt Router (Supports 23.05+ and 24.x APK)
 
 1. **Transfer the OpenWrt files**:
-   Transfer the `openwrt/` directory to the router's `/tmp` directory:
+   Clean any previous installations and transfer the `openwrt` directory to the router:
    ```bash
-   scp -O -r PowerOrchestrator/openwrt/ root@192.168.11.1:/tmp/openwrt_install
+   ssh root@192.168.11.1 "rm -rf /tmp/openwrt"
+   scp -O -r PowerOrchestrator/openwrt root@192.168.11.1:/tmp/openwrt
    ```
 2. **Execute the Installer**:
    SSH into the OpenWrt router and run the installer:
    ```bash
-   cd /tmp/openwrt_install
+   cd /tmp/openwrt
    sh install_openwrt.sh
    ```
    > [!NOTE]
@@ -274,12 +275,17 @@ To configure the portal and guest security, edit `/etc/homelab_power.conf` on yo
 5. **Optional: Setup Tailscale Funnel for Public Access**:
    To expose the waking portal publicly to your friends via a secure domain (e.g., `https://your-router.ts.net`) using Tailscale Funnel:
    - Ensure **MagicDNS** and **HTTPS Certificates** are enabled in your Tailscale Admin Console (under the DNS tab).
-   - Run the following commands on your OpenWrt router to map and expose the port:
+   - Run the following command on your OpenWrt router to expose the local waking portal (port 8080) to the public internet (port 443):
      ```bash
-     tailscale serve https:443 / http://127.0.0.1:8080
-     tailscale funnel 443 on
+     tailscale funnel --bg 8080
      ```
-   - Verify that your funnel is active by running `tailscale funnel status`.
+   - Verify that your funnel is active by running `tailscale funnel status` or `tailscale serve status`.
+   - **Configure OpenWrt Firewall**: By default, OpenWrt drops traffic on newly created virtual interfaces. To allow traffic from the Tailscale interface (`tailscale0`) to access your waking server, add it to your trusted LAN zone:
+     ```bash
+     uci add_list firewall.@zone[0].device='tailscale0'
+     uci commit firewall
+     /etc/init.d/firewall restart
+     ```
 
 ---
 
