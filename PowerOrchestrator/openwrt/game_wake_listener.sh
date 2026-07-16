@@ -63,31 +63,7 @@ etherwake -i br-lan "$HOST_MAC"
 
 # 2. Dispatch notifications
 MSG=$(eval echo "\"$MSG_WAKE_GAME_PLAYER\"")
-if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-    local target_chats="${NOTIFY_CHAT_ID}"
-    [ -z "$target_chats" ] && target_chats=$(echo "$ALLOWED_USER_IDS" | cut -d',' -f1)
-    
-    for chat in $(echo "$target_chats" | tr ',' ' '); do
-        # If notifications are disabled, only notify IDs in ALLOWED_USER_IDS (admin private chats)
-        if [ "$DISABLE_NOTIFICATIONS" = "1" ]; then
-            local is_allowed=0
-            for allowed in $(echo "$ALLOWED_USER_IDS" | tr ',' ' '); do
-                if [ "$chat" = "$allowed" ]; then
-                    is_allowed=1
-                    break
-                fi
-            done
-            if [ "$is_allowed" -eq 0 ]; then
-                continue
-            fi
-        fi
-        
-        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${chat}" \
-            --data-urlencode "text=$MSG" \
-            --data-urlencode "parse_mode=Markdown" >/dev/null &
-    done
-fi
+/usr/bin/homelab_notify.sh "$MSG" &
 
 # 3. Wait for the real host service to boot up
 # We check if the host is pingable, and if it's TCP, we also verify if the specific port responds.

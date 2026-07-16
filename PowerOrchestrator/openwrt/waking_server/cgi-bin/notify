@@ -1,0 +1,127 @@
+#!/bin/sh
+# =============================================================================
+# OpenWrt CGI Notification Endpoint (for Proxmox and local triggers)
+# File: /www_waking/cgi-bin/notify
+# =============================================================================
+
+CONF="/etc/homelab_power.conf"
+if [ -f "$CONF" ]; then
+    . "$CONF"
+fi
+
+# Set default subnets if not defined
+[ -z "$PRIVATE_SUBNETS" ] && PRIVATE_SUBNETS="192.168.11.0/24,100.64.0.0/10,127.0.0.1/32"
+
+# --- Native IP CIDR Subnet Match Helpers ---
+ip_to_int() {
+    local o1 o2 o3 o4
+    IFS=. read -r o1 o2 o3 o4 <<EOF
+$1
+EOF
+    echo "$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))"
+}
+
+ip_in_subnet() {
+    local ip="$1"
+    local subnet="$2"
+    local sub_ip=$(echo "$subnet" | cut -d'/' -f1)
+    local mask=$(echo "$subnet" | cut -d'/' -f2 -s)
+    [ -z "$mask" ] && mask=32
+    
+    local ip_int=$(ip_to_int "$ip")
+    local sub_int=$(ip_to_int "$sub_ip")
+    
+    local mask_int=0
+    if [ "$mask" -eq 0 ]; then
+        mask_int=0
+    else
+        mask_int=$(( 0xFFFFFFFF << (32 - mask) ))
+    fi
+    
+    local result=$(( (ip_int & mask_int) == (sub_int & mask_int) ))
+    return $(( ! result ))
+}
+
+# Extract client IP
+CLIENT_IP="${REMOTE_ADDR:-127.0.0.1}"
+if [ -n "$HTTP_X_FORWARDED_FOR" ]; then
+    CLIENT_IP=$(echo "$HTTP_X_FORWARDED_FOR" | cut -d',' -f1 | tr -d ' ')
+elif [ -n "$HTTP_X_REAL_IP" ]; then
+    CLIENT_IP="$HTTP_X_REAL_IP"
+fi
+
+# Security Check: Verify source IP is allowed
+AUTHORIZED=0
+if [ "$CLIENT_IP" = "127.0.0.1" ] || [ "$CLIENT_IP" = "::1" ] || [ "$CLIENT_IP" = "$HOST_IP" ]; then
+    AUTHORIZED=1
+else
+    for range in $(echo "$PRIVATE_SUBNETS" | tr ',' ' '); do
+        if ip_in_subnet "$CLIENT_IP" "$range"; then
+            AUTHORIZED=1
+            break
+        fi
+    done
+fi
+
+if [ "$AUTHORIZED" -eq 0 ]; then
+    echo "Status: 403 Forbidden"
+    echo "Content-Type: application/json"
+    echo ""
+    echo '{"status": "error", "message": "Access Denied: Untrusted source IP"}'
+    exit 0
+fi
+
+# URL decode helper
+url_decode() {
+    echo "$1" | awk '
+    BEGIN {
+        for (i=0; i<256; i++) {
+            char = sprintf("%c", i)
+            hex = sprintf("%02x", i)
+            hexcodes[hex] = char
+            hexcodes[toupper(hex)] = char
+        }
+    }
+    {
+        gsub(/\+/, " ")
+        while (match($0, /%[0-9A-Fa-f]{2}/)) {
+            code = substr($0, RSTART+1, 2)
+            $0 = substr($0, 1, RSTART-1) hexcodes[code] substr($0, RSTART+3)
+        }
+        print $0
+    }'
+}
+
+# Parse message parameter
+MSG=""
+if [ "$REQUEST_METHOD" = "POST" ] && [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ]; then
+    POST_DATA=$(head -c "$CONTENT_LENGTH")
+    MSG=$(echo "$POST_DATA" | tr '&' '\n' | grep -E '^(msg|text)=' | cut -d'=' -f2- 2>/dev/null)
+    if [ -n "$MSG" ]; then
+        MSG=$(url_decode "$MSG")
+    else
+        MSG="$POST_DATA"
+    fi
+fi
+
+if [ -z "$MSG" ]; then
+    MSG_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E '^(msg|text)=' | cut -d'=' -f2- 2>/dev/null)
+    if [ -n "$MSG_RAW" ]; then
+        MSG=$(url_decode "$MSG_RAW")
+    fi
+fi
+
+if [ -n "$MSG" ]; then
+    # Run notifications script locally in the background
+    /usr/bin/homelab_notify.sh "$MSG" &
+    
+    echo "Content-Type: application/json"
+    echo ""
+    echo '{"status": "success", "message": "Notification dispatched"}'
+else
+    echo "Status: 400 Bad Request"
+    echo "Content-Type: application/json"
+    echo ""
+    echo '{"status": "error", "message": "No message parameter provided"}'
+fi
+exit 0
