@@ -7,6 +7,9 @@
 
 set -e
 
+# Change directory to the script's location
+cd "$(dirname "$0")"
+
 # Parse command line arguments
 FORCE_CONFIG=0
 for arg in "$@"; do
@@ -103,8 +106,10 @@ mkdir -p /www_waking/cgi-bin
 cp waking_server/index.html /www_waking/index.html
 cp waking_server/cgi-bin/status /www_waking/cgi-bin/status
 cp waking_server/cgi-bin/notify /www_waking/cgi-bin/notify
+cp waking_server/cgi-bin/utils.sh /www_waking/cgi-bin/utils.sh
 chmod +x /www_waking/cgi-bin/status
 chmod +x /www_waking/cgi-bin/notify
+
 
 echo "Waking server deployed to /www_waking."
 

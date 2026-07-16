@@ -182,19 +182,19 @@ if [ -z "$VMID" ]; then
     GUEST_CODES_RAW=$(get_query_param "guest_codes")
     GUEST_CODES=$(url_decode "$GUEST_CODES_RAW")
     
-    local metrics=""
-    local cpu=""
-    local ram_used=""
-    local ram_total=""
-    local temp=""
-    local disk=""
+    metrics=""
+    cpu=""
+    ram_used=""
+    ram_total=""
+    temp=""
+    disk=""
     
     if [ "$HOST_STATUS" = "online" ]; then
         CACHE_FILE="/tmp/homelab_metrics_cache"
         CACHE_VALID=0
         if [ -f "$CACHE_FILE" ]; then
-            local now=$(date +%s)
-            local cache_time=$(head -n 1 "$CACHE_FILE" 2>/dev/null)
+            now=$(date +%s)
+            cache_time=$(head -n 1 "$CACHE_FILE" 2>/dev/null)
             if echo "$cache_time" | grep -qE "^[0-9]+$"; then
                 if [ $((now - cache_time)) -lt 10 ]; then
                     metrics=$(tail -n +2 "$CACHE_FILE" 2>/dev/null)
@@ -212,7 +212,7 @@ if [ -z "$VMID" ]; then
         
         if [ -n "$metrics" ]; then
             cpu=$(echo "$metrics" | cut -d'|' -f1)
-            local ram_raw=$(echo "$metrics" | cut -d'|' -f2)
+            ram_raw=$(echo "$metrics" | cut -d'|' -f2)
             temp=$(echo "$metrics" | cut -d'|' -f3)
             disk=$(echo "$metrics" | cut -d'|' -f4)
             
@@ -274,7 +274,7 @@ if [ -z "$VMID" ]; then
         
         g_online=0
         if [ "$HOST_STATUS" = "online" ]; then
-            local ping_file="/tmp/ping_pid_${$}_vmid_${g_vmid}"
+            ping_file="/tmp/ping_pid_${$}_vmid_${g_vmid}"
             if [ -f "$ping_file" ]; then
                 g_online=$(cat "$ping_file")
                 rm -f "$ping_file"

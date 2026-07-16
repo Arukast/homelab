@@ -7,6 +7,9 @@
 
 set -e
 
+# Change directory to the script's location
+cd "$(dirname "$0")"
+
 # Parse command line arguments
 FORCE_CONFIG=0
 for arg in "$@"; do
