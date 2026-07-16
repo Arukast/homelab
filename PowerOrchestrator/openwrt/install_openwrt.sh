@@ -55,7 +55,7 @@ fi
 echo "[2/6] Setting up configuration..."
 if [ -f "/etc/homelab_power.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
     echo "Configuration file /etc/homelab_power.conf already exists. Preserving it."
-    echo "💡 Run this installer with the -f or --force flag to overwrite it with your laptop's version."
+    echo "Run this installer with the -f or --force flag to overwrite it with your laptop's version."
 else
     if [ -f "homelab_power.conf" ]; then
         cp homelab_power.conf /etc/homelab_power.conf
@@ -171,7 +171,7 @@ echo "Checking SSH Key and Security Wrapper setup...      "
 echo "===================================================="
 SSH_KEY_PATH="/etc/dropbear/id_dropbear"
 if [ ! -f "$SSH_KEY_PATH" ]; then
-    echo "⚠️  SSH key not found at $SSH_KEY_PATH!"
+    echo "Warning: SSH key not found at $SSH_KEY_PATH!"
     echo "Generating new Dropbear key..."
     mkdir -p /etc/dropbear
     dropbearkey -t rsa -f "$SSH_KEY_PATH"
@@ -185,14 +185,14 @@ fi
 if [ -n "$HOST_IP" ] && [ "$HOST_IP" != "192.168.11.10" ]; then
     echo "Attempting to verify SSH connectivity and wrapper on Proxmox ($HOST_IP)..."
     if /usr/bin/homelab_config_sync.sh; then
-        echo "✅ Sync and verification succeeded!"
+        echo "Sync and verification succeeded!"
     else
-        echo "⚠️  Verification warning/failure. Please check SSH keys and host connectivity."
+        echo "Verification warning/failure. Please check SSH keys and host connectivity."
     fi
 else
-    echo "💡 HOST_IP is still default. Skipping automatic connection tests."
+    echo "HOST_IP is still default. Skipping automatic connection tests."
     echo "Once you edit /etc/homelab_power.conf, you can sync config and verify security by running:"
-    echo "👉 homelab_config_sync.sh"
+    echo "homelab_config_sync.sh"
 fi
 
 echo "===================================================="

@@ -26,13 +26,13 @@ echo "===================================================="
 
 # 1. Check local Dropbear private key permissions
 if [ -f "$SSH_KEY_PATH" ]; then
-    perms=$(first_char=$(ls -ld "$SSH_KEY_PATH" | cut -c 2-4); echo "$first_char")
+    perms=$(ls -ld "$SSH_KEY_PATH" | cut -c 2-4)
     if [ "$perms" != "rw-" ] && [ "$perms" != "r--" ]; then
-        echo "⚠️  Warning: SSH key permissions are too open. Setting to 600..."
+        echo "Warning: SSH key permissions are too open. Setting to 600..."
         chmod 600 "$SSH_KEY_PATH" 2>/dev/null
     fi
 else
-    echo "❌ Error: SSH key not found at $SSH_KEY_PATH." >&2
+    echo "Error: SSH key not found at $SSH_KEY_PATH." >&2
     exit 1
 fi
 
@@ -43,19 +43,19 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5"
 # Test simple connectivity with wrapper-allowed echo OK
 SSH_TEST=$(ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "echo OK" 2>/dev/null)
 if [ "$SSH_TEST" != "OK" ]; then
-    echo "❌ Error: Cannot establish passwordless SSH trust. SSH command failed." >&2
+    echo "Error: Cannot establish passwordless SSH trust. SSH command failed." >&2
     echo "Please ensure the public key is added to Proxmox /root/.ssh/authorized_keys." >&2
     exit 1
 fi
-echo "✅ Passwordless SSH trust verified."
+echo "Passwordless SSH trust verified."
 
 # Test if wrapper is active by running unauthorized command
 SSH_BLOCK_TEST=$(ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "uname" 2>&1)
 if echo "$SSH_BLOCK_TEST" | grep -iq "Access Denied"; then
-    echo "✅ SSH Command Wrapper detected and active on Proxmox."
+    echo "SSH Command Wrapper detected and active on Proxmox."
     WRAPPER_ACTIVE=1
 else
-    echo "⚠️  WARNING: SSH command restrictions NOT detected on Proxmox!"
+    echo "WARNING: SSH command restrictions NOT detected on Proxmox!"
     echo "The host executed 'uname' without wrapper blocking. This is a security risk."
     echo "Please prepend the command wrapper inside Proxmox /root/.ssh/authorized_keys."
     WRAPPER_ACTIVE=0
@@ -69,7 +69,7 @@ if [ -z "$ROUTER_IP" ]; then
 fi
 
 if [ -z "$ROUTER_IP" ]; then
-    echo "❌ Error: Could not determine router local IP." >&2
+    echo "Error: Could not determine router local IP." >&2
     exit 1
 fi
 echo "Determined Router IP facing Proxmox: $ROUTER_IP"
@@ -111,11 +111,11 @@ else
 fi
 
 if [ $? -eq 0 ]; then
-    echo "✅ Configuration successfully synchronized to Proxmox /etc/homelab_power.conf."
+    echo "Configuration successfully synchronized to Proxmox /etc/homelab_power.conf."
     # Trigger systemd reload/restart on PVE if timer is active
     ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "systemctl restart proxmox_idle_monitor.timer" >/dev/null 2>&1 || true
 else
-    echo "❌ Error: Failed to write configuration to Proxmox." >&2
+    echo "Error: Failed to write configuration to Proxmox." >&2
     exit 1
 fi
 

@@ -83,8 +83,8 @@ process_command() {
     case "$action" in
         /start|/help)
             local markup='{"inline_keyboard":[
-                [{"text":"🔍 Status","callback_data":"/status"},{"text":"🖥️ List VMs","callback_data":"/list"}],
-                [{"text":"⚡ Wake Host","callback_data":"/wake"},{"text":"💤 Sleep (Safe)","callback_data":"/sleep"}]
+                [{"text":"Status","callback_data":"/status"},{"text":"List VMs","callback_data":"/list"}],
+                [{"text":"Wake Host","callback_data":"/wake"},{"text":"Sleep (Safe)","callback_data":"/sleep"}]
             ]}'
             send_message "$chat_id" "$MSG_BOT_HELP" "$markup"
             ;;
@@ -94,7 +94,7 @@ process_command() {
             
             if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
                 local markup='{"inline_keyboard":[
-                    [{"text":"⚡ Wake Host","callback_data":"/wake"},{"text":"🔄 Refresh","callback_data":"/status"}]
+                    [{"text":"Wake Host","callback_data":"/wake"},{"text":"Refresh","callback_data":"/status"}]
                 ]}'
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")" "$markup"
                 return
@@ -116,17 +116,17 @@ process_command() {
             local vm_count=$(echo "$metrics_payload" | awk '/===VM===/{flag=1; next} flag' | awk 'NR>1' | wc -l)
             local vm_running=$(echo "$metrics_payload" | awk '/===VM===/{flag=1; next} flag' | awk 'NR>1 && $3=="running"' | wc -l)
             
-            local status_msg="⚡ *Host Status:* ONLINE
-🔥 *Load Average:* ${load_avg}
-📟 *RAM Usage:* ${ram_info}
+            local status_msg="*Host Status:* ONLINE
+*Load Average:* ${load_avg}
+*RAM Usage:* ${ram_info}
 
-🖥️ *Guest Nodes:*
+*Guest Nodes:*
 • LXC Containers: ${lxc_running}/${lxc_count} running
 • QEMU VMs: ${vm_running}/${vm_count} running"
-
+ 
             local markup='{"inline_keyboard":[
-                [{"text":"🖥️ List VMs","callback_data":"/list"},{"text":"💤 Sleep (Safe)","callback_data":"/sleep"}],
-                [{"text":"🔄 Refresh","callback_data":"/status"}]
+                [{"text":"List VMs","callback_data":"/list"},{"text":"Sleep (Safe)","callback_data":"/sleep"}],
+                [{"text":"Refresh","callback_data":"/status"}]
             ]}'
             send_message "$chat_id" "$status_msg" "$markup"
             ;;
@@ -187,7 +187,7 @@ process_command() {
             done
             
             if [ -n "$blocking_guests" ]; then
-                send_message "$chat_id" "⚠️ *Shutdown Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostshutdownforce\`."
+                send_message "$chat_id" "*Shutdown Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostshutdownforce\`."
                 return
             fi
             
@@ -234,7 +234,7 @@ process_command() {
             done
             
             if [ -n "$blocking_guests" ]; then
-                send_message "$chat_id" "⚠️ *Reboot Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostrebootforce\`."
+                send_message "$chat_id" "*Reboot Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostrebootforce\`."
                 return
             fi
             
@@ -263,33 +263,57 @@ process_command() {
                 return
             fi
             
-            local lxcs=$($SSH_CMD "pct list | awk 'NR>1 {print \"• LXC [\" \$1 \"] (\" \$3 \"): \" \$2}'" 2>/dev/null)
-            local vms=$($SSH_CMD "qm list | awk 'NR>1 {print \"• VM [\" \$1 \"] (\" \$2 \"): \" \$3}'" 2>/dev/null)
+            local payload=$($SSH_CMD "echo '===LXC==='; pct list; echo '===VM==='; qm list" 2>/dev/null)
+            if [ $? -ne 0 ] || [ -z "$payload" ]; then
+                send_message "$chat_id" "$MSG_BOT_SSH_FAILED"
+                return
+            fi
+            
+            local lxcs=$(echo "$payload" | awk '
+                /===LXC===/{flag=1; next}
+                /===VM===/{flag=0}
+                flag && NR>2 && $1 != "VMID" {
+                    print "• LXC [" $1 "] (" $3 "): " $2
+                }
+            ')
+            local vms=$(echo "$payload" | awk '
+                /===VM===/{flag=1; next}
+                flag && NR>2 && $1 != "VMID" {
+                    print "• VM [" $1 "] (" $2 "): " $3
+                }
+            ')
             
             [ -z "$lxcs" ] && lxcs="None configured."
             [ -z "$vms" ] && vms="None configured."
             
-            local list_msg="🖥️ *Proxmox Guest Nodes:*
+            local list_msg="*Proxmox Guest Nodes:*
  
-📦 *Containers:*
+*Containers:*
 ${lxcs}
  
-🎮 *Virtual Machines:*
+*Virtual Machines:*
 ${vms}"
             
-            local lxc_buttons=$($SSH_CMD "pct list" 2>/dev/null | awk 'NR>1 {
-                vmid = $1; status = $2; name = $3;
-                btn_text = (status == "running" ? "🛑 Stop " name : "🚀 Start " name);
-                cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
-                printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
-            }' | paste -sd, -)
+            local lxc_buttons=$(echo "$payload" | awk '
+                /===LXC===/{flag=1; next}
+                /===VM===/{flag=0}
+                flag && NR>2 && $1 != "VMID" && $1 != "" {
+                    vmid = $1; status = $2; name = $3;
+                    btn_text = (status == "running" ? "Stop " name : "Start " name);
+                    cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
+                    printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
+                }
+            ' | paste -sd, -)
             
-            local vm_buttons=$($SSH_CMD "qm list" 2>/dev/null | awk 'NR>1 {
-                vmid = $1; name = $2; status = $3;
-                btn_text = (status == "running" ? "🛑 Stop " name : "🚀 Start " name);
-                cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
-                printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
-            }' | paste -sd, -)
+            local vm_buttons=$(echo "$payload" | awk '
+                /===VM===/{flag=1; next}
+                flag && NR>2 && $1 != "VMID" && $1 != "" {
+                    vmid = $1; name = $2; status = $3;
+                    btn_text = (status == "running" ? "Stop " name : "Start " name);
+                    cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
+                    printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
+                }
+            ' | paste -sd, -)
             
             local all_buttons=""
             if [ -n "$lxc_buttons" ] && [ -n "$vm_buttons" ]; then
@@ -302,7 +326,7 @@ ${vms}"
             
             local markup=""
             if [ -n "$all_buttons" ]; then
-                all_buttons="${all_buttons},[{\"text\":\"🔄 Refresh List\",\"callback_data\":\"/list\"}]"
+                all_buttons="${all_buttons},[{\"text\":\"Refresh List\",\"callback_data\":\"/list\"}]"
                 markup="{\"inline_keyboard\":[$all_buttons]}"
             fi
             
@@ -316,7 +340,7 @@ ${vms}"
             fi
             
             if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
-                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
+                send_message "$chat_id" "Error: VMID must be numeric."
                 return
             fi
             
@@ -324,11 +348,11 @@ ${vms}"
             (
                 # Check if host is offline, if so wake it first
                 if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
-                    send_message "$chat_id" "😴 *Host is Offline:* Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
+                    send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
                     etherwake -i br-lan "$HOST_MAC"
                     
                     # Wait for host to come online and respond to SSH
-                    send_message "$chat_id" "⏳ Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."
+                    send_message "$chat_id" "Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."
                     
                     local success=0
                     local attempt=1
@@ -344,11 +368,11 @@ ${vms}"
                     done
                     
                     if [ $success -eq 0 ]; then
-                        send_message "$chat_id" "⚠️ *Timeout:* Proxmox host did not respond to SSH in time. Please check physical status."
+                        send_message "$chat_id" "Timeout: Proxmox host did not respond to SSH in time. Please check physical status."
                         return
                     fi
                     
-                    send_message "$chat_id" "⚡ *Host Online:* Proxmox host is awake! Proceeding to boot guest..."
+                    send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot guest..."
                 fi
                 
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
@@ -377,7 +401,7 @@ ${start_out:-Started successfully}
             fi
             
             if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
-                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
+                send_message "$chat_id" "Error: VMID must be numeric."
                 return
             fi
             
@@ -410,7 +434,7 @@ ${stop_out:-Stop signal dispatched}
             fi
             
             if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
-                send_message "$chat_id" "⚠️ *Error:* VMID must be numeric."
+                send_message "$chat_id" "Error: VMID must be numeric."
                 return
             fi
             

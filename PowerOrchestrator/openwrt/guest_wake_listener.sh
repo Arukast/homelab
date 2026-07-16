@@ -29,8 +29,11 @@ if [ -f "$MSG_CONF" ]; then
 fi
 
 # Parse port and protocol (e.g. 19132/udp -> PORT_NUM=19132, PROTO=udp)
-PORT_NUM=$(echo "$PORT_RAW" | cut -d'/' -f1)
-PROTO=$(echo "$PORT_RAW" | cut -d'/' -f2 -s)
+PORT_NUM="${PORT_RAW%/*}"
+PROTO=""
+if [ "$PORT_NUM" != "$PORT_RAW" ]; then
+    PROTO="${PORT_RAW#*/}"
+fi
 [ -z "$PROTO" ] && PROTO="tcp"
 
 SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
