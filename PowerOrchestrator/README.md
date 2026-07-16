@@ -131,8 +131,7 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 2. **Run the Installer**:
    SSH into the Proxmox host and execute the installer:
    ```bash
-   cd /tmp/proxmox_install
-   bash install_proxmox.sh
+   bash /tmp/proxmox_install/install_proxmox.sh
    ```
    *Note: This automatically registers the systemd services and places `proxmox_idle_monitor.sh` and `homelab_ssh_wrapper.sh` in `/usr/local/bin/`.*
 
@@ -152,15 +151,14 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 2. **Execute the Installer**:
    SSH into the OpenWrt router and run the installer:
    ```bash
-   cd /tmp/openwrt
-   sh install_openwrt.sh
+   sh /tmp/openwrt_install/install_openwrt.sh
    ```
    > [!NOTE]
    > The installer detects if you are running modern **OpenWrt 24+** (using the `apk` Alpine package manager) or older branches (using `opkg`) and automatically manages updates and installations natively!
    > 
    > Add the `--force` or `-f` flag if you want to push configurations edited on your laptop directly:
    > ```bash
-   > sh install_openwrt.sh --force
+   > sh /tmp/openwrt_install/install_openwrt.sh --force
    > ```
 
 3. **Configure Credentials, IPs, and Custom Messages**:
