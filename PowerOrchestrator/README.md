@@ -268,17 +268,17 @@ To configure the portal and guest security, edit `/etc/homelab_power.conf` on yo
    Setup the passwords required to access the portal itself and to wake individual guests:
    ```ini
    # Access passcodes for the dashboard portal
-   PORTAL_FUNNEL_PASSCODE="ArukastFunnelOpen!@#123"
-   PORTAL_PRIVATE_PASSCODE="zulvanethomelab" # Leave empty for passcode-free LAN access
+   PORTAL_FUNNEL_PASSCODE="your_funnel_passcode_here"
+   PORTAL_PRIVATE_PASSCODE="your_private_passcode_here" # Leave empty for passcode-free LAN access
    
    # Individual guest wake passcodes
-   GUEST_PASSCODE_MAP="120:BojongsantosIS2023,121:BojongsantosIS2023"
+   GUEST_PASSCODE_MAP="120:your_guest_passcode_here,121:your_guest_passcode_here"
    ```
 
 3. **Configure Post-Wake Connection Info Messages**:
    Set custom text or HTML messages (e.g., join links, passwords) to be displayed on-screen once a guest successfully wakes up:
    ```ini
-   GUEST_MESSAGE_MAP="120:Unturned Server<br>Server Code: 85568392936286430,121:Minecraft Server<br>Java: remote-panels.gl.joinmc.link"
+   GUEST_MESSAGE_MAP="120:Unturned Server<br>Server Code: your_server_code,121:Minecraft Server<br>Java: your_domain_or_ip"
    ```
 
 4. **Sync Configuration and Restart Services**:
