@@ -84,7 +84,7 @@ echo "" >> "$TEMP_CONF"
 
 # Filter and extract variables from /etc/homelab_power.conf
 # This strictly keeps only PVE-relevant parameters and avoids leaking secrets
-for var in CPU_THRESHOLD NET_INTERFACE NET_THRESHOLD_KBPS MONITORED_PORTS \
+for var in CPU_THRESHOLD SCALE_CPU_THRESHOLD_BY_CORES NET_INTERFACE NET_THRESHOLD_KBPS MONITORED_PORTS \
            LXC_SUSPEND_METHOD VM_SUSPEND_METHOD PROTECTED_PROCESSES \
            GUEST_ORCHESTRATION_MAP ACTIVE_TIME_WINDOWS GUEST_NAME_MAP GUEST_PORT_MAP \
            LOG_FILE ENABLE_SYSLOG; do

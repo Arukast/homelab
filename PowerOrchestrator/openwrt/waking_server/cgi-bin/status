@@ -27,87 +27,28 @@ fi
 [ -z "$PRIVATE_SUBNETS" ] && PRIVATE_SUBNETS="192.168.11.0/24,100.64.0.0/10,127.0.0.1/32"
 [ -z "$ENABLE_PORT_WAKE_LISTENERS" ] && ENABLE_PORT_WAKE_LISTENERS="0"
 
-# --- Native IP CIDR Subnet Match Helpers ---
-ip_to_int() {
-    local o1 o2 o3 o4
-    IFS=. read -r o1 o2 o3 o4 <<EOF
-$1
-EOF
-    echo "$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))"
-}
+# Source shared CGI utilities
+. "$(dirname "$0")/utils.sh"
 
-ip_in_subnet() {
-    local ip="$1"
-    local subnet="$2"
-    local sub_ip=$(echo "$subnet" | cut -d'/' -f1)
-    local mask=$(echo "$subnet" | cut -d'/' -f2 -s)
-    [ -z "$mask" ] && mask=32
-    
-    local ip_int=$(ip_to_int "$ip")
-    local sub_int=$(ip_to_int "$sub_ip")
-    
-    # Avoid bitwise shift error by 32 in standard shell
-    local mask_int=0
-    if [ "$mask" -eq 0 ]; then
-        mask_int=0
-    else
-        mask_int=$(( 0xFFFFFFFF << (32 - mask) ))
-    fi
-    
-    local result=$(( (ip_int & mask_int) == (sub_int & mask_int) ))
-    return $(( ! result ))
-}
+# Global SSH Settings for Proxmox Host Communication
+SSH_KEY_PATH="/etc/dropbear/id_dropbear"
+SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
 
-REAL_PEER_IP="${REMOTE_ADDR:-127.0.0.1}"
-is_private_network() {
-    for range in $(echo "$PRIVATE_SUBNETS" | tr ',' ' '); do
-        if ip_in_subnet "$REAL_PEER_IP" "$range"; then
-            return 0
-        fi
-    done
-    return 1
-}
+# Extract client IP using helper
+CLIENT_IP=$(get_client_ip)
 
-# Robust Busybox-native URL decoder using AWK
-url_decode() {
-    echo "$1" | awk '
-    BEGIN {
-        for (i=0; i<256; i++) {
-            char = sprintf("%c", i)
-            hex = sprintf("%02x", i)
-            hexcodes[hex] = char
-            hexcodes[toupper(hex)] = char
-        }
-    }
-    {
-        gsub(/\+/, " ")
-        while (match($0, /%[0-9A-Fa-f]{2}/)) {
-            code = substr($0, RSTART+1, 2)
-            $0 = substr($0, 1, RSTART-1) hexcodes[code] substr($0, RSTART+3)
-        }
-        print $0
-    }'
-}
-
-# Helper to escape values for safe JSON transmission
-escape_json() {
-    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-
-# Extract true Client IP (handles proxies like Tailscale Funnel)
-CLIENT_IP="${REMOTE_ADDR:-127.0.0.1}"
-if [ -n "$HTTP_X_FORWARDED_FOR" ]; then
-    CLIENT_IP=$(echo "$HTTP_X_FORWARDED_FOR" | cut -d',' -f1 | tr -d ' ')
-elif [ -n "$HTTP_X_REAL_IP" ]; then
-    CLIENT_IP="$HTTP_X_REAL_IP"
+# Determine if user connection originates from private/local network
+USER_IS_PRIVATE=0
+if is_private_ip "$CLIENT_IP" "$PRIVATE_SUBNETS"; then
+    USER_IS_PRIVATE=1
 fi
 
-# Parse query string parameters (vmid, service, name, code, portal_code, and trigger)
-VMID_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -iE "^(vmid|service|name)=" | cut -d'=' -f2- 2>/dev/null)
+# Parse query string parameters using helper
+VMID_RAW=$(get_query_param "vmid\|service\|name")
 VMID=$(url_decode "$VMID_RAW" | tr 'A-Z' 'a-z')
-CODE_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^code=" | cut -d'=' -f2- 2>/dev/null)
-PORTAL_CODE_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^portal_code=" | cut -d'=' -f2- 2>/dev/null)
-TRIGGER=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^trigger=" | cut -d'=' -f2- 2>/dev/null)
+CODE_RAW=$(get_query_param "code")
+PORTAL_CODE_RAW=$(get_query_param "portal_code")
+TRIGGER=$(get_query_param "trigger")
 
 CODE=$(url_decode "$CODE_RAW")
 PORTAL_CODE=$(url_decode "$PORTAL_CODE_RAW")
@@ -126,12 +67,8 @@ fi
 
 # Check if we should bypass the DDoS Guard rate limit
 BYPASS_RATE_LIMIT=0
-if [ "$TRIGGER" = "1" ] || [ -n "$CODE_RAW" ] || [ -n "$PORTAL_CODE_RAW" ]; then
-    # Bypass for active user interactions (entering codes or waking up)
-    BYPASS_RATE_LIMIT=1
-fi
-if is_private_network; then
-    # Bypass completely for local private network users
+if [ "$TRIGGER" = "1" ] || [ -n "$CODE_RAW" ] || [ -n "$PORTAL_CODE_RAW" ] || [ "$USER_IS_PRIVATE" -eq 1 ]; then
+    # Bypass for active user interactions or local private network users
     BYPASS_RATE_LIMIT=1
 fi
 
@@ -195,14 +132,14 @@ if ! echo "$HTTP_HOST" | grep -qE "(:8080|:8443)"; then
     IS_FUNNEL_REQUEST=1
 fi
 
-USER_IS_PRIVATE=0
-if [ "$IS_FUNNEL_REQUEST" -eq 0 ] && is_private_network; then
-    USER_IS_PRIVATE=1
+USER_IS_ACTUALLY_PRIVATE=0
+if [ "$IS_FUNNEL_REQUEST" -eq 0 ] && [ "$USER_IS_PRIVATE" -eq 1 ]; then
+    USER_IS_ACTUALLY_PRIVATE=1
 fi
 
 PORTAL_LOCKED=0
 REQUIRED_PORTAL_CODE=""
-if [ "$USER_IS_PRIVATE" -eq 1 ]; then
+if [ "$USER_IS_ACTUALLY_PRIVATE" -eq 1 ]; then
     REQUIRED_PORTAL_CODE="$PORTAL_PRIVATE_PASSCODE"
 else
     REQUIRED_PORTAL_CODE="$PORTAL_FUNNEL_PASSCODE"
@@ -215,7 +152,7 @@ if [ -n "$REQUIRED_PORTAL_CODE" ]; then
 fi
 
 if [ "$PORTAL_LOCKED" -eq 1 ]; then
-    echo "{\"status\": \"portal_locked\", \"is_private\": ${USER_IS_PRIVATE}}"
+    echo "{\"status\": \"portal_locked\", \"is_private\": ${USER_IS_ACTUALLY_PRIVATE}}"
     exit 0
 fi
 
@@ -242,7 +179,7 @@ if [ -z "$VMID" ]; then
     fi
     
     # Parse guest_codes (Format: vmid:code,vmid:code)
-    GUEST_CODES_RAW=$(echo "$QUERY_STRING" | tr '&' '\n' | grep -E "^guest_codes=" | cut -d'=' -f2- 2>/dev/null)
+    GUEST_CODES_RAW=$(get_query_param "guest_codes")
     GUEST_CODES=$(url_decode "$GUEST_CODES_RAW")
     
     local metrics=""
@@ -286,7 +223,7 @@ if [ -z "$VMID" ]; then
     
     echo "{"
     echo "  \"status\": \"online\","
-    echo "  \"is_private\": ${USER_IS_PRIVATE},"
+    echo "  \"is_private\": ${USER_IS_ACTUALLY_PRIVATE},"
     if [ "$HOST_STATUS" = "online" ] && [ -n "$cpu" ]; then
         echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\", \"cpu\": ${cpu}, \"ram_used\": ${ram_used}, \"ram_total\": ${ram_total}, \"temp\": ${temp}, \"disk\": ${disk}},"
     else
@@ -295,6 +232,7 @@ if [ -z "$VMID" ]; then
     echo "  \"guests\": ["
     
     # Pre-ping all guests in parallel to avoid sequential delay bottleneck
+    # FIX RACE CONDITION: Use unique process ID $$ in filename
     if [ "$HOST_STATUS" = "online" ]; then
         for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
             g_vmid=$(echo "$entry" | cut -d':' -f1)
@@ -302,9 +240,9 @@ if [ -z "$VMID" ]; then
             if [ -n "$g_ip" ]; then
                 (
                     if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
-                        echo "1" > "/tmp/ping_vmid_${g_vmid}"
+                        echo "1" > "/tmp/ping_pid_${$}_vmid_${g_vmid}"
                     else
-                        echo "0" > "/tmp/ping_vmid_${g_vmid}"
+                        echo "0" > "/tmp/ping_pid_${$}_vmid_${g_vmid}"
                     fi
                 ) &
             fi
@@ -322,7 +260,7 @@ if [ -z "$VMID" ]; then
         g_privacy=$(echo "$GUEST_PRIVACY_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
         [ -z "$g_privacy" ] && g_privacy="private" # Default to private-only
         
-        if [ "$USER_IS_PRIVATE" -eq 0 ] && [ "$g_privacy" != "public" ]; then
+        if [ "$USER_IS_ACTUALLY_PRIVATE" -eq 0 ] && [ "$g_privacy" != "public" ]; then
             # Friends cannot see private guests
             continue
         fi
@@ -336,9 +274,10 @@ if [ -z "$VMID" ]; then
         
         g_online=0
         if [ "$HOST_STATUS" = "online" ]; then
-            if [ -f "/tmp/ping_vmid_${g_vmid}" ]; then
-                g_online=$(cat "/tmp/ping_vmid_${g_vmid}")
-                rm -f "/tmp/ping_vmid_${g_vmid}"
+            local ping_file="/tmp/ping_pid_${$}_vmid_${g_vmid}"
+            if [ -f "$ping_file" ]; then
+                g_online=$(cat "$ping_file")
+                rm -f "$ping_file"
             else
                 if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
                     g_online=1
@@ -354,7 +293,7 @@ if [ -z "$VMID" ]; then
         g_client_code=$(echo "$GUEST_CODES" | tr ',' '\n' | grep -E "^${g_vmid}:" | cut -d':' -f2- 2>/dev/null)
         
         g_verified=0
-        if [ "$g_passcode_req" = "false" ] || [ "$USER_IS_PRIVATE" -eq 1 ]; then
+        if [ "$g_passcode_req" = "false" ] || [ "$USER_IS_ACTUALLY_PRIVATE" -eq 1 ]; then
             g_verified=1
         elif [ -n "$g_client_code" ] && [ "$g_client_code" = "$g_passcode" ]; then
             g_verified=1
@@ -378,13 +317,16 @@ if [ -z "$VMID" ]; then
             WAKE_TIME=$(cat "/tmp/waking_vmid_${g_vmid}")
             if [ $((CURRENT_TIME - WAKE_TIME)) -lt 90 ]; then
                 g_status="waking"
-            else
+              else
                 rm -f "/tmp/waking_vmid_${g_vmid}"
             fi
         fi
         
         echo -n "    {\"vmid\": \"${g_vmid}\", \"name\": \"${g_name_escaped}\", \"status\": \"${g_status}\", \"passcode_required\": ${g_passcode_req}, \"message\": \"${g_msg_escaped}\", \"port\": \"${g_port}\", \"ip\": \"${g_ip}\"}"
     done
+    
+    # Clean up any leftover ping files for this process
+    rm -f /tmp/ping_pid_${$}_vmid_*
     
     echo ""
     echo "  ]"
@@ -419,7 +361,7 @@ fi
 
 # 1. Passcode Lock Check
 PASS_VERIFIED=0
-if [ "$PASSCODE_REQUIRED" = "false" ] || [ "$USER_IS_PRIVATE" -eq 1 ]; then
+if [ "$PASSCODE_REQUIRED" = "false" ] || [ "$USER_IS_ACTUALLY_PRIVATE" -eq 1 ]; then
     # Bypass passcode if none configured or if user is on private network
     PASS_VERIFIED=1
 elif [ -n "$CODE" ] && [ "$CODE" = "$TARGET_PASSCODE" ]; then
@@ -485,9 +427,6 @@ fi
 etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
 
 # Asynchronous Guest Resume Loop
-SSH_KEY_PATH="/etc/dropbear/id_dropbear"
-SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
-
 (
     while true; do
         if is_host_online; then

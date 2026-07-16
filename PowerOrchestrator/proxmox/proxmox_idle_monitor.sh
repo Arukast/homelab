@@ -9,6 +9,7 @@ CONF="/etc/homelab_power.conf"
 
 # Default fallback values
 CPU_THRESHOLD="0.15"
+SCALE_CPU_THRESHOLD_BY_CORES=1
 NET_INTERFACE="vmbr0"
 NET_THRESHOLD_KBPS="50"
 MONITORED_PORTS="25565,32400,8006,8123,22"
@@ -34,6 +35,25 @@ MSG_CONF="/etc/homelab_messages.conf"
 if [ -f "$MSG_CONF" ]; then
     source "$MSG_CONF"
 fi
+
+# --- POSIX Float Math Helpers (Avoids bc dependency) ---
+to_integer() {
+    local val="$1"
+    local int=$(echo "$val" | cut -d'.' -f1)
+    local dec=$(echo "$val" | cut -d'.' -f2 -s)
+    
+    [ -z "$int" ] && int=0
+    [ -z "$dec" ] && dec=0
+    
+    # Pad decimal to 2 digits
+    dec=$(printf "%-2.2s" "${dec}00" | tr ' ' '0')
+    
+    # Strip leading zeros
+    local res="${int}${dec}"
+    res=$(echo "$res" | sed 's/^0*//')
+    [ -z "$res" ] && res=0
+    echo "$res"
+}
 
 # --- Smart Wake Scheduling Helpers ---
 day_to_num() {
@@ -344,11 +364,28 @@ done
 # 2. Check CPU Load Average
 # Read 1-minute load average from /proc/loadavg
 LOAD_1=$(awk '{print $1}' /proc/loadavg)
-log "Current 1-minute CPU load average: $LOAD_1 (Threshold: $CPU_THRESHOLD)"
 
-# Compare float numbers in bash
-if (( $(echo "$LOAD_1 > $CPU_THRESHOLD" | bc -l) )); then
-    log "BLOCK: CPU load average ($LOAD_1) exceeds threshold ($CPU_THRESHOLD). Host is NOT idle."
+# Multi-core awareness scaling
+CORES=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo || echo 1)
+ACTUAL_THRESHOLD="$CPU_THRESHOLD"
+if [ "$SCALE_CPU_THRESHOLD_BY_CORES" -eq 1 ]; then
+    LIMIT_INT=$(to_integer "$CPU_THRESHOLD")
+    SCALED_INT=$(( LIMIT_INT * CORES ))
+    
+    int_part=$(( SCALED_INT / 100 ))
+    dec_part=$(( SCALED_INT % 100 ))
+    dec_part=$(printf "%02d" "$dec_part")
+    ACTUAL_THRESHOLD="${int_part}.${dec_part}"
+    log "Multi-core scaling active: CPU Threshold scaled by $CORES cores to $ACTUAL_THRESHOLD"
+else
+    SCALED_INT=$(to_integer "$CPU_THRESHOLD")
+fi
+
+log "Current 1-minute CPU load average: $LOAD_1 (Threshold: $ACTUAL_THRESHOLD)"
+
+LOAD_INT=$(to_integer "$LOAD_1")
+if [ "$LOAD_INT" -gt "$SCALED_INT" ]; then
+    log "BLOCK: CPU load average ($LOAD_1) exceeds threshold ($ACTUAL_THRESHOLD). Host is NOT idle."
     exit 0
 fi
 
@@ -369,12 +406,13 @@ if [ -n "$NET_INTERFACE" ] && [ -d "/sys/class/net/$NET_INTERFACE" ]; then
     
     # Calculate average KB/s
     TOTAL_KB=$(( (RX_DIFF + TX_DIFF) / 1024 ))
-    AVERAGE_KBPS=$(echo "scale=2; $TOTAL_KB / 10" | bc -l)
+    TOTAL_THRESHOLD=$(( NET_THRESHOLD_KBPS * 10 ))
+    AVERAGE_KBPS=$(( TOTAL_KB / 10 ))
     
-    log "Network activity: $AVERAGE_KBPS KB/s (Threshold: ${NET_THRESHOLD_KBPS} KB/s)"
+    log "Network activity: ~${AVERAGE_KBPS} KB/s (Threshold: ${NET_THRESHOLD_KBPS} KB/s)"
     
-    if (( $(echo "$AVERAGE_KBPS > $NET_THRESHOLD_KBPS" | bc -l) )); then
-        log "BLOCK: Average network throughput ($AVERAGE_KBPS KB/s) exceeds threshold (${NET_THRESHOLD_KBPS} KB/s). Host is NOT idle."
+    if [ "$TOTAL_KB" -gt "$TOTAL_THRESHOLD" ]; then
+        log "BLOCK: Average network throughput (~${AVERAGE_KBPS} KB/s) exceeds threshold (${NET_THRESHOLD_KBPS} KB/s). Host is NOT idle."
         exit 0
     fi
 else
