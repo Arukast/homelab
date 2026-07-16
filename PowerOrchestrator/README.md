@@ -236,6 +236,41 @@ Perfect for directing friends directly to a single game server without exposing 
 * Customizes titles and instructions dynamically.
 * Verified passcodes are saved in `localStorage` under service-specific isolated keys (e.g. `wake_code_120`), ensuring they never conflict.
 
+### Configuration Guide
+
+To configure the portal and guest security, edit `/etc/homelab_power.conf` on your OpenWrt router:
+
+1. **Map Guest Names & Ports**:
+   Set friendly names for your VMIDs so they display properly in the UI, and map web service VMIDs to their respective web interface ports:
+   ```ini
+   GUEST_NAME_MAP="100:Wireguard,120:Unturned,121:Minecraft"
+   GUEST_PORT_MAP="100:51821" # Redirects browser to port 51821 once VM 100 is ONLINE
+   ```
+
+2. **Define Access Passcodes**:
+   Setup the passwords required to access the portal itself and to wake individual guests:
+   ```ini
+   # Access passcodes for the dashboard portal
+   PORTAL_FUNNEL_PASSCODE="ArukastFunnelOpen!@#123"
+   PORTAL_PRIVATE_PASSCODE="zulvanethomelab" # Leave empty for passcode-free LAN access
+   
+   # Individual guest wake passcodes
+   GUEST_PASSCODE_MAP="120:BojongsantosIS2023,121:BojongsantosIS2023"
+   ```
+
+3. **Configure Post-Wake Connection Info Messages**:
+   Set custom text or HTML messages (e.g., join links, passwords) to be displayed on-screen once a guest successfully wakes up:
+   ```ini
+   GUEST_MESSAGE_MAP="120:Unturned Server<br>Server Code: 85568392936286430,121:Minecraft Server<br>Java: remote-panels.gl.joinmc.link"
+   ```
+
+4. **Sync Configuration and Restart Services**:
+   Deploy the new settings to the Proxmox host and restart the local router daemons:
+   ```bash
+   homelab_config_sync.sh
+   /etc/init.d/power_proxy restart
+   ```
+
 ---
 
 ## Advanced Security, Privacy and Anti-DDoS
