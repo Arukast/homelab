@@ -271,6 +271,16 @@ To configure the portal and guest security, edit `/etc/homelab_power.conf` on yo
    /etc/init.d/power_proxy restart
    ```
 
+5. **Optional: Setup Tailscale Funnel for Public Access**:
+   To expose the waking portal publicly to your friends via a secure domain (e.g., `https://your-router.ts.net`) using Tailscale Funnel:
+   - Ensure **MagicDNS** and **HTTPS Certificates** are enabled in your Tailscale Admin Console (under the DNS tab).
+   - Run the following commands on your OpenWrt router to map and expose the port:
+     ```bash
+     tailscale serve https:443 / http://127.0.0.1:8080
+     tailscale funnel 443 on
+     ```
+   - Verify that your funnel is active by running `tailscale funnel status`.
+
 ---
 
 ## Advanced Security, Privacy and Anti-DDoS
