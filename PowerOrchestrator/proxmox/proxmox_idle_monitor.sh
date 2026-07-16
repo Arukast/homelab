@@ -20,10 +20,10 @@ LOG_FILE="/var/log/proxmox_power.log"
 ENABLE_SYSLOG=1
 
 # Default fallback messages (if /etc/homelab_messages.conf is not present)
-MSG_PROXMOX_GUEST_SUSPENDED='💤 *Guest Idle Sleep:* Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been successfully suspended to reclaim system resources!'
-MSG_PROXMOX_GUEST_STOPPED='🛑 *Guest Idle Sleep:* Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been stopped cleanly to reclaim system resources!'
-MSG_PROXMOX_HOST_SLEEPING='😴 *Proxmox Host Sleeping:* Host is entering S3 Suspend-to-RAM. All system states successfully saved!'
-MSG_PROXMOX_HOST_AWAKE='⚡ *Proxmox Host Awake:* Host successfully woke up from ACPI S3 sleep. Restoring all guest VMs...'
+MSG_PROXMOX_GUEST_SUSPENDED='[Guest Idle Sleep] Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been successfully suspended to reclaim system resources!'
+MSG_PROXMOX_GUEST_STOPPED='[Guest Idle Sleep] Service $GUEST_NAME (VMID $VMID) was idle for $TIMEOUT_MIN minutes and has been stopped cleanly to reclaim system resources!'
+MSG_PROXMOX_HOST_SLEEPING='[Proxmox Host Sleeping] Host is entering S3 Suspend-to-RAM. All system states successfully saved!'
+MSG_PROXMOX_HOST_AWAKE='[Proxmox Host Awake] Host successfully woke up from ACPI S3 sleep. Restoring all guest VMs...'
 
 # Load configuration if exists
 if [ -f "$CONF" ]; then
@@ -39,19 +39,21 @@ fi
 # --- POSIX Float Math Helpers (Avoids bc dependency) ---
 to_integer() {
     local val="$1"
-    local int=$(echo "$val" | cut -d'.' -f1)
-    local dec=$(echo "$val" | cut -d'.' -f2 -s)
-    
+    local int="${val%.*}"
+    local dec=""
+    if [ "$int" != "$val" ]; then
+        dec="${val#*.}"
+    fi
     [ -z "$int" ] && int=0
     [ -z "$dec" ] && dec=0
     
-    # Pad decimal to 2 digits
-    dec=$(printf "%-2.2s" "${dec}00" | tr ' ' '0')
+    dec="${dec}00"
+    dec="${dec:0:2}"
     
-    # Strip leading zeros
     local res="${int}${dec}"
-    res=$(echo "$res" | sed 's/^0*//')
-    [ -z "$res" ] && res=0
+    while [[ $res == 0* && ${#res} -gt 1 ]]; do
+        res="${res#0}"
+    done
     echo "$res"
 }
 
@@ -524,7 +526,7 @@ fi
 # 6. Put Proxmox Host to Sleep (ACPI S3 State), Shutdown or Reboot
 if [ "$ACTION" = "shutdown" ]; then
     log "Shutdown: Powering off Proxmox host..."
-    notify "🛑 *Proxmox Host Shutting Down:* System is powering off cleanly!"
+    notify "[Proxmox Host Shutting Down] System is powering off cleanly!"
     sync
     wait
     sleep 3
@@ -532,7 +534,7 @@ if [ "$ACTION" = "shutdown" ]; then
     exit 0
 elif [ "$ACTION" = "reboot" ]; then
     log "Reboot: Rebooting Proxmox host..."
-    notify "🔄 *Proxmox Host Rebooting:* System is rebooting cleanly!"
+    notify "[Proxmox Host Rebooting] System is rebooting cleanly!"
     sync
     wait
     sleep 3
@@ -551,7 +553,7 @@ fi
 # =============================================================================
 
 # --- WAKE UP SEQUENCE ---
-log "⚡ WAKE: Proxmox host has woken up from S3 suspend."
+log "WAKE: Proxmox host has woken up from S3 suspend."
 rm -f /tmp/proxmox_guest_idle_states 2>/dev/null
 
 # 7. Resume Suspended Nodes
@@ -586,5 +588,5 @@ for vmid in $SHUTDOWN_VMS; do
     fi
 done
 
-log "⚡ WAKE: All guest nodes successfully restored. Power-saving cycle complete."
+log "WAKE: All guest nodes successfully restored. Power-saving cycle complete."
 exit 0
