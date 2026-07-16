@@ -224,7 +224,23 @@ If you want to run multiple heavy services but dynamically reclaim their memory 
 
 The landing page features a **dual-mode engine** that adapts dynamically depending on how it is accessed:
 
-### A. Unified Directory Mode (No parameters, e.g. `http://your-router.ts.net:8080/`)
+### Access URLs & Separation
+
+To access the portal, use the following URL formats depending on whether you want private (full) access or public (restricted) access:
+
+*   **Private / LAN Access (For You)**
+    *   **URL Format:** `http://<your-router-ip>:8080/` (e.g. `http://192.168.11.1:8080/` or your router's Tailscale IP `http://100.x.y.z:8080/`)
+    *   **Behavior:** Accessing the website from a trusted private IP (defined in `PRIVATE_SUBNETS`) shows **all services** (both private and public).
+    *   **Passcode:** Prompts for `PORTAL_PRIVATE_PASSCODE` (leave empty for instant password-free access inside your home network).
+
+*   **Public / External Access (For Friends & Visitors)**
+    *   **URL Format:** `https://<your-router>.ts.net/` (when using Tailscale Funnel forwarding port 8080 to public port 443)
+    *   **Behavior:** Visitors connecting from the public internet will **only see public services** (private services are completely hidden from the grid).
+    *   **Passcode:** Prompts for `PORTAL_FUNNEL_PASSCODE` to unlock the portal.
+
+---
+
+### A. Unified Directory Mode (No parameters, e.g. `http://192.168.11.1:8080/`)
 When accessed without any query string, it serves a gorgeous, unified glassmorphic portal of all authorized guest servers.
 * **Portal-Level Gatekeeper**: Secures your dashboard from unauthorized eyes. Configure `PORTAL_FUNNEL_PASSCODE` (for friends/public access) and `PORTAL_PRIVATE_PASSCODE` (for private/LAN access) in `/etc/homelab_power.conf` to lock the portal.
 * **Interactive Live Grid**: Displays status cards (ONLINE, SLEEPING, or WAKING) for every guest.
@@ -232,7 +248,7 @@ When accessed without any query string, it serves a gorgeous, unified glassmorph
 * **One-Click Secure Wakes**: Click "Wake" to boot any guest. If a passcode is configured in `GUEST_PASSCODE_MAP`, it opens a passcode verification modal. If no passcode is configured, it **bypasses verification entirely** and boots instantly!
 * **Auto-Redirect Web UIs**: For web interfaces (like NAS or Home Assistant), the portal will automatically redirect the user's browser tab to their web interface as soon as the service finishes booting!
 
-### B. Single-Service Mode (Tailored URL, e.g. `http://your-router.ts.net:8080/?service=minecraft`)
+### B. Single-Service Mode (Tailored URL, e.g. `https://your-router.ts.net/?service=minecraft`)
 Perfect for directing friends directly to a single game server without exposing other homelab details.
 * Customizes titles and instructions dynamically.
 * Verified passcodes are saved in `localStorage` under service-specific isolated keys (e.g. `wake_code_120`), ensuring they never conflict.
