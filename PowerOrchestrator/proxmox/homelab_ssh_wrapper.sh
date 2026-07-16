@@ -15,6 +15,14 @@ case "$SSH_ORIGINAL_COMMAND" in
         exit 0
         ;;
         
+    "echo '===LXC==='; pct list; echo '===VM==='; qm list")
+        echo '===LXC==='
+        pct list
+        echo '===VM==='
+        qm list
+        exit 0
+        ;;
+        
     "echo '===METRICS==='; uptime; echo '===RAM==='; free -h; echo '===LXC==='; pct list; echo '===VM==='; qm list")
         echo '===METRICS==='
         uptime

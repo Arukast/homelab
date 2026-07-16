@@ -55,7 +55,7 @@ fi
 echo -e "${GREEN}[2/5] Setting up configuration...${NC}"
 if [ -f "/etc/homelab_power.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
     echo "Configuration file /etc/homelab_power.conf already exists. Preserving it."
-    echo "💡 Run this installer with the -f or --force flag to overwrite it with your laptop's version."
+    echo "Run this installer with the -f or --force flag to overwrite it with your laptop's version."
 else
     if [ -f "homelab_power.conf" ]; then
         cp homelab_power.conf /etc/homelab_power.conf
@@ -95,13 +95,13 @@ systemctl enable --now proxmox_idle_monitor.timer
 echo -e "${BLUE}====================================================${NC}"
 echo -e "${GREEN}Installation Successful!${NC}"
 echo -e "You can configure thresholds and monitored ports in:"
-echo -e "👉 ${BLUE}/etc/homelab_power.conf${NC}"
+echo -e "   ${BLUE}/etc/homelab_power.conf${NC}"
 echo -e ""
 echo -e "To view logs, run:"
-echo -e "👉 ${BLUE}tail -f /var/log/proxmox_power.log${NC}"
+echo -e "   ${BLUE}tail -f /var/log/proxmox_power.log${NC}"
 echo -e "or"
-echo -e "👉 ${BLUE}journalctl -u proxmox_idle_monitor.service${NC}"
+echo -e "   ${BLUE}journalctl -u proxmox_idle_monitor.service${NC}"
 echo -e ""
 echo -e "To manually trigger an idle check and suspend immediately if idle:"
-echo -e "👉 ${BLUE}systemctl start proxmox_idle_monitor.service${NC}"
+echo -e "   ${BLUE}systemctl start proxmox_idle_monitor.service${NC}"
 echo -e "${BLUE}====================================================${NC}"
