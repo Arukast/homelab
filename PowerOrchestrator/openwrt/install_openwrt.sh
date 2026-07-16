@@ -187,7 +187,7 @@ if [ -f "/etc/homelab_power.conf" ]; then
     . "/etc/homelab_power.conf"
 fi
 
-if [ -n "$HOST_IP" ] && [ "$HOST_IP" != "192.168.11.10" ]; then
+if [ -n "$HOST_IP" ] && { [ "$HOST_IP" != "192.168.11.10" ] || [ "$HOST_MAC" != "aa:bb:cc:dd:ee:ff" ] || [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; }; then
     echo "Attempting to verify SSH connectivity and wrapper on Proxmox ($HOST_IP)..."
     if /usr/bin/homelab_config_sync.sh; then
         echo "Sync and verification succeeded!"
