@@ -8,6 +8,11 @@
 # this value, the CPU is considered idle. (e.g. 0.15 is 15% of a single core)
 CPU_THRESHOLD="0.15"
 
+# Automatically scale the CPU_THRESHOLD by the number of CPU cores on the host.
+# e.g., if set to 1, and the server has 8 cores, the actual threshold will be 0.15 * 8 = 1.20.
+# Set to 0 to use the CPU_THRESHOLD strictly as a system-wide load threshold.
+SCALE_CPU_THRESHOLD_BY_CORES=1
+
 # --- Network Activity Thresholds ---
 # The network interface or bridge to monitor for active client traffic (usually vmbr0 in Proxmox)
 NET_INTERFACE="vmbr0"
