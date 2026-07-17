@@ -1,0 +1,10 @@
+[Unit]
+Description=Proxmox VE Resource and Service Health Monitor
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/proxmox_resource_monitor.sh
+
+[Install]
+WantedBy=multi-user.target

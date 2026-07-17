@@ -76,6 +76,10 @@ cp proxmox_idle_monitor.sh /usr/local/bin/proxmox_idle_monitor.sh
 chmod 755 /usr/local/bin/proxmox_idle_monitor.sh
 echo "Installed /usr/local/bin/proxmox_idle_monitor.sh"
 
+cp proxmox_resource_monitor.sh /usr/local/bin/proxmox_resource_monitor.sh
+chmod 755 /usr/local/bin/proxmox_resource_monitor.sh
+echo "Installed /usr/local/bin/proxmox_resource_monitor.sh"
+
 cp homelab_ssh_wrapper.sh /usr/local/bin/homelab_ssh_wrapper.sh
 chmod 755 /usr/local/bin/homelab_ssh_wrapper.sh
 echo "Installed /usr/local/bin/homelab_ssh_wrapper.sh"
@@ -84,16 +88,21 @@ echo "Installed /usr/local/bin/homelab_ssh_wrapper.sh"
 echo -e "${GREEN}[4/5] Registering systemd services...${NC}"
 cp proxmox_idle_monitor.service /etc/systemd/system/
 cp proxmox_idle_monitor.timer /etc/systemd/system/
+cp proxmox_resource_monitor.service /etc/systemd/system/
+cp proxmox_resource_monitor.timer /etc/systemd/system/
 
 chmod 644 /etc/systemd/system/proxmox_idle_monitor.service
 chmod 644 /etc/systemd/system/proxmox_idle_monitor.timer
+chmod 644 /etc/systemd/system/proxmox_resource_monitor.service
+chmod 644 /etc/systemd/system/proxmox_resource_monitor.timer
 
 # Reload systemd
 systemctl daemon-reload
 
 # 5. Enable and start timer
-echo -e "${GREEN}[5/5] Activating systemd timer...${NC}"
+echo -e "${GREEN}[5/5] Activating systemd timers...${NC}"
 systemctl enable --now proxmox_idle_monitor.timer
+systemctl enable --now proxmox_resource_monitor.timer
 
 echo -e "${BLUE}====================================================${NC}"
 echo -e "${GREEN}Installation Successful!${NC}"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Proxmox VE Resource and Service Health Monitor Periodically
+Documentation=https://github.com/Arukast/OpenWrt-Config
+
+[Timer]
+# Run 3 minutes after system boots
+OnBootSec=3min
+# Run every 5 minutes thereafter
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
