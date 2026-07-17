@@ -157,6 +157,7 @@ if [ "$PORTAL_LOCKED" -eq 1 ]; then
 fi
 
 # --- General Host check helper ---
+# --- General Host check helper ---
 is_host_online() {
     if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
         return 0
@@ -169,19 +170,34 @@ is_host_online() {
     return 1
 }
 
+# Determine host status detail
+HOST_STATUS="sleeping"
+if is_host_online; then
+    HOST_STATUS="online"
+    rm -f "/tmp/waking_host"
+else
+    # Host is offline. Check if explicitly shut down or if waking timed out (boot failure)
+    TARGET_STATE=$(cat /tmp/homelab_target_state 2>/dev/null)
+    if [ "$TARGET_STATE" = "SHUTDOWN" ]; then
+        HOST_STATUS="powered_off"
+    elif [ -f "/tmp/waking_host" ]; then
+        WAKE_TIME=$(cat "/tmp/waking_host")
+        if [ $((CURRENT_TIME - WAKE_TIME)) -gt 90 ]; then
+            HOST_STATUS="powered_off"
+        else
+            HOST_STATUS="waking"
+        fi
+    fi
+fi
+
 # =============================================================================
 # MULTI-TENANT DIRECTORY DASHBOARD MODE (No specific VMID requested)
 # =============================================================================
 if [ -z "$VMID" ]; then
-    HOST_STATUS="sleeping"
-    if is_host_online; then
-        HOST_STATUS="online"
-    fi
-    
     # Parse guest_codes (Format: vmid:code,vmid:code)
     GUEST_CODES_RAW=$(get_query_param "guest_codes")
     GUEST_CODES=$(url_decode "$GUEST_CODES_RAW")
-    
+
     metrics=""
     cpu=""
     ram_used=""
@@ -370,7 +386,7 @@ fi
 
 if [ "$PASS_VERIFIED" -eq 0 ] && [ -n "$CODE" ]; then
     # Incorrect passcode submitted
-    echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+    echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
     exit 0
 fi
 
@@ -387,26 +403,26 @@ fi
 
 # 2. Return Status and only return sensitive messages if verified
 if [ "$PASS_VERIFIED" -eq 0 ]; then
-    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"passcode_verified\": false, \"message\": \"\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"passcode_verified\": false, \"message\": \"\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
     exit 0
 fi
 
 # 3. Code verified! Return status and handle wake triggers
 if [ "$GUEST_ONLINE" -eq 1 ]; then
     rm -f "/tmp/waking_vmid_${VMID}"
-    echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+    echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
     exit 0
 fi
 
 # If actively waking and trigger not requested (or already triggered), bypass execution
 if [ "$GUEST_WAKING" -eq 1 ]; then
-    echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+    echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
     exit 0
 fi
 
 # 4. Guest is offline (sleeping). If trigger=1 is not requested, return sleeping but with verified details
 if [ "$TRIGGER" != "1" ]; then
-    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
     exit 0
 fi
 
@@ -415,6 +431,11 @@ enforce_wol_cooldown
 
 # Mark as waking
 echo "$CURRENT_TIME" > "/tmp/waking_vmid_${VMID}"
+if ! is_host_online; then
+    if [ ! -f "/tmp/waking_host" ]; then
+        echo "$CURRENT_TIME" > "/tmp/waking_host"
+    fi
+fi
 
 # Log notifications
 if ! is_host_online; then
@@ -456,5 +477,5 @@ etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
     rm -f "/tmp/waking_vmid_${VMID}"
 ) >/dev/null 2>&1 </dev/null &
 
-echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\"}"
+echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
 exit 0

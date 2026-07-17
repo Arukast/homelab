@@ -261,6 +261,11 @@
             animation: pulse-blink 1.2s infinite ease-in-out;
         }
 
+        .service-dot.powered-off {
+            background: #ef4444;
+            box-shadow: 0 0 6px #ef4444;
+        }
+
         .service-btn {
             width: 100%;
             padding: 10px 16px;
@@ -731,6 +736,11 @@
                 </div>
             </div>
             
+            <!-- HOST power outage warning notice -->
+            <div id="host-powered-off-notice" style="display: none; width: 100%; padding: 16px 24px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 20px; color: #f87171; font-size: 14px; font-weight: 500; text-align: center; line-height: 1.5; backdrop-filter: blur(12px);">
+                ⚠️ The Proxmox host is completely powered off or unreachable. Please contact the administrator.
+            </div>
+            
             <!-- HOST health metrics grid -->
             <div class="metrics-grid" id="host-metrics-bar" style="display: none;">
                 <div class="metric-card">
@@ -911,6 +921,7 @@
         let progressInterval = null;
         let dashboardInterval = null;
         let currentPollingInterval = 30000;
+        let hostStatus = "sleeping";
 
         // Custom Toast notifier helper
         function showToast(msg) {
@@ -1069,8 +1080,17 @@
                         applyDynamicTitle(data.is_private);
 
                         // Set Host Status
-                        if (data.host.status === 'online') {
+                        hostStatus = data.host.status;
+                        if (hostStatus === 'powered_off') {
+                            document.getElementById('host-powered-off-notice').style.display = 'block';
+                        } else {
+                            document.getElementById('host-powered-off-notice').style.display = 'none';
+                        }
+
+                        if (hostStatus === 'online') {
                             hostStatusDot.className = "status-dot online";
+                            hostStatusDot.style.background = "var(--accent-green)";
+                            hostStatusDot.style.boxShadow = "0 0 6px var(--accent-green)";
                             hostStatusText.innerText = "ONLINE";
                             
                             const metricsBar = document.getElementById('host-metrics-bar');
@@ -1101,8 +1121,22 @@
                             } else {
                                 metricsBar.style.display = 'none';
                             }
+                        } else if (hostStatus === 'powered_off') {
+                            hostStatusDot.className = "status-dot";
+                            hostStatusDot.style.background = "#ef4444";
+                            hostStatusDot.style.boxShadow = "0 0 8px #ef4444";
+                            hostStatusText.innerText = "POWERED OFF / UNREACHABLE";
+                            document.getElementById('host-metrics-bar').style.display = 'none';
+                        } else if (hostStatus === 'waking') {
+                            hostStatusDot.className = "status-dot waking";
+                            hostStatusDot.style.background = "var(--accent-primary)";
+                            hostStatusDot.style.boxShadow = "0 0 6px var(--accent-primary)";
+                            hostStatusText.innerText = "WAKING HOST...";
+                            document.getElementById('host-metrics-bar').style.display = 'none';
                         } else {
                             hostStatusDot.className = "status-dot";
+                            hostStatusDot.style.background = "#eab308";
+                            hostStatusDot.style.boxShadow = "0 0 6px #eab308";
                             hostStatusText.innerText = "SLEEPING";
                             document.getElementById('host-metrics-bar').style.display = 'none';
                         }
@@ -1173,6 +1207,9 @@
                 } else if (g.status === 'waking') {
                     dotClass = "service-dot waking";
                     statusText = "WAKING";
+                } else if (hostStatus === 'powered_off') {
+                    dotClass = "service-dot powered-off";
+                    statusText = "POWERED OFF";
                 }
 
                 let btnHtml = '';
@@ -1205,7 +1242,11 @@
                         btnHtml = actionBtn;
                     }
                 } else {
-                    btnHtml = `<button class="service-btn" onclick="triggerWakeSequence('${g.vmid}', '${g.name}', ${g.passcode_required})">Wake Server</button>`;
+                    if (hostStatus === 'powered_off') {
+                        btnHtml = `<div class="service-btn active-btn" style="background: rgba(239, 68, 68, 0.1); color: #f87171; border-color: rgba(239, 68, 68, 0.25); text-align: center; cursor: default;">Host Powered Off</div>`;
+                    } else {
+                        btnHtml = `<button class="service-btn" onclick="triggerWakeSequence('${g.vmid}', '${g.name}', ${g.passcode_required})">Wake Server</button>`;
+                    }
                 }
 
                 let msgHtml = '';
@@ -1457,6 +1498,27 @@
                     serviceName = data.name || "Homelab Service";
                     servicePort = data.port || "";
                     serviceIp = data.ip || "";
+
+                    if (data.host_status === 'powered_off') {
+                        clearInterval(progressInterval);
+                        serviceLoadingBlock.style.display = 'block';
+                        servicePasscodeBlock.style.display = 'none';
+                        wakingTitle.innerText = `Host Powered Off`;
+                        wakingDesc.innerHTML = `The physical Proxmox host is completely powered off or unreachable.<br><br>Please contact the administrator.`;
+                        
+                        avatarEl.classList.remove('online');
+                        wakingDot.className = "status-dot";
+                        wakingDot.style.background = "#ef4444";
+                        wakingDot.style.boxShadow = "0 0 8px #ef4444";
+                        wakingBadgeText.innerText = "POWERED OFF";
+                        document.querySelector('.progress-container').style.display = 'none';
+                        
+                        setTimeout(() => checkSingleService(false), 8000);
+                        return;
+                    } else {
+                        // Ensure progress bar visibility is restored if transitioning back from powered_off
+                        document.querySelector('.progress-container').style.display = 'block';
+                    }
 
                     if (data.status === 'blocked' || data.status === 'cooldown') {
                         showToast(data.message);

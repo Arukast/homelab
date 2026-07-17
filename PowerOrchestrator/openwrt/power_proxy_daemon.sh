@@ -218,6 +218,7 @@ while true; do
                 fi
             fi
             rm -f /tmp/homelab_target_state
+            rm -f /tmp/waking_host
             CURRENT_STATE="UP"
         fi
         
