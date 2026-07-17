@@ -152,3 +152,28 @@ ACTIVE_TIME_WINDOWS=""
 # Logging settings for Proxmox host
 LOG_FILE="/var/log/proxmox_power.log"
 ENABLE_SYSLOG=1
+
+# --- Proxmox Host Resource & Service Monitoring Settings ---
+# CPU usage threshold in percentage to trigger warning alert (0-100)
+MONITOR_CPU_THRESHOLD_PCT=85
+
+# RAM usage threshold in percentage to trigger warning alert (0-100)
+MONITOR_RAM_THRESHOLD_PCT=90
+
+# Disk usage threshold in percentage to trigger warning alert (0-100)
+MONITOR_DISK_THRESHOLD_PCT=90
+
+# Space-separated filesystems/directories to check for disk utilization
+MONITOR_DISK_PATHS="/ /var/lib/vz"
+
+# Systemd services to monitor on the Proxmox host
+MONITOR_SERVICES="pvedaemon pveproxy pvestatd"
+
+# ZFS pools to check health status (space-separated, e.g. "rpool", or "all" to check all pools)
+MONITOR_ZFS_POOLS="rpool"
+
+# Comma-separated list of critical Guest VM/LXC IDs that should be alert-monitored if stopped
+MONITOR_CRITICAL_GUESTS=""
+
+# Cooldown period in seconds before repeating a warning notification for a persistent issue (default: 4 hours)
+MONITOR_COOLDOWN_SEC=14400
