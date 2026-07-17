@@ -119,7 +119,36 @@ GUEST_MESSAGE_MAP="120:Welcome to Minecraft!,122:Welcome to Unturned!"
 # Leave blank or omit for standard name-based fallback matching or port-free requests.
 GUEST_PORT_MAP=""
 
+# --- Proxmox Host Idle Detection & Suspension Settings ---
+# These parameters will be synchronized to Proxmox /etc/homelab_power.conf
 
+# CPU load average threshold to consider system idle (e.g. 0.15 = 15% of a core/system capacity)
+CPU_THRESHOLD="0.15"
 
+# Automatically multiply CPU_THRESHOLD by number of host cores (1 = Enabled/Yes, 0 = Disabled/No)
+SCALE_CPU_THRESHOLD_BY_CORES=1
 
+# Network interface to monitor for active traffic (typically vmbr0)
+NET_INTERFACE="vmbr0"
 
+# Network traffic rate threshold in KB/s. Active if 10s average exceeds this.
+NET_THRESHOLD_KBPS="50"
+
+# Active TCP ports which block sleep if established client connections exist
+MONITORED_PORTS="25565,32400,8006,8123,22"
+
+# Safe power management modes for guests
+# LXC Options: stop (clean shutdown, recommended to avoid CRIU failures), suspend (stateful freeze)
+LXC_SUSPEND_METHOD="stop"
+# VM Options: shutdown (ACPI stop, recommended for GPU passthrough), suspend (stateful snapshot)
+VM_SUSPEND_METHOD="shutdown"
+
+# Processes that block host shutdown/sleep
+PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
+
+# Time windows where the host must stay awake (e.g. "Mon-Fri:18:00-00:00")
+ACTIVE_TIME_WINDOWS=""
+
+# Logging settings for Proxmox host
+LOG_FILE="/var/log/proxmox_power.log"
+ENABLE_SYSLOG=1
