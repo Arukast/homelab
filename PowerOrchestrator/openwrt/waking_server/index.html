@@ -266,6 +266,11 @@
             box-shadow: 0 0 6px #ef4444;
         }
 
+        .service-dot.maintenance {
+            background: #f97316;
+            box-shadow: 0 0 6px #f97316;
+        }
+
         .service-btn {
             width: 100%;
             padding: 10px 16px;
@@ -630,6 +635,12 @@
             animation: none;
         }
 
+        .status-dot.maintenance {
+            background: #f97316;
+            box-shadow: 0 0 6px #f97316;
+            animation: none;
+        }
+
         /* Animations */
         @keyframes pulse-out {
             0% {
@@ -739,6 +750,11 @@
             <!-- HOST power outage warning notice -->
             <div id="host-powered-off-notice" style="display: none; width: 100%; padding: 16px 24px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 20px; color: #f87171; font-size: 14px; font-weight: 500; text-align: center; line-height: 1.5; backdrop-filter: blur(12px);">
                 ⚠️ The Proxmox host is completely powered off or unreachable. Please contact the administrator.
+            </div>
+            
+            <!-- SYSTEM maintenance notice -->
+            <div id="system-maintenance-notice" style="display: none; width: 100%; padding: 16px 24px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 20px; color: #fbbf24; font-size: 14px; font-weight: 500; text-align: center; line-height: 1.5; backdrop-filter: blur(12px); margin-bottom: 16px;">
+                🔧 <strong>System Maintenance Active:</strong> <span id="system-maintenance-message"></span>
             </div>
             
             <!-- HOST health metrics grid -->
@@ -1087,6 +1103,20 @@
                             document.getElementById('host-powered-off-notice').style.display = 'none';
                         }
 
+                        // Set System Maintenance Banner
+                        const sysMaint = data.maintenance_system || '';
+                        const sysMaintNotice = document.getElementById('system-maintenance-notice');
+                        const sysMaintMsg = document.getElementById('system-maintenance-message');
+                        
+                        if (sysMaint) {
+                            sysMaintNotice.style.display = 'block';
+                            sysMaintMsg.innerText = sysMaint;
+                            window.systemMaintenanceActive = true;
+                        } else {
+                            sysMaintNotice.style.display = 'none';
+                            window.systemMaintenanceActive = false;
+                        }
+
                         if (hostStatus === 'online') {
                             hostStatusDot.className = "status-dot online";
                             hostStatusDot.style.background = "var(--accent-green)";
@@ -1201,7 +1231,10 @@
 
                 let dotClass = "service-dot";
                 let statusText = "SLEEPING";
-                if (g.status === 'online') {
+                if (g.maintenance) {
+                    dotClass = "service-dot maintenance";
+                    statusText = "MAINTENANCE";
+                } else if (g.status === 'online') {
                     dotClass = "service-dot online";
                     statusText = "ONLINE";
                 } else if (g.status === 'waking') {
@@ -1213,7 +1246,11 @@
                 }
 
                 let btnHtml = '';
-                if (g.status === 'online') {
+                if (window.systemMaintenanceActive) {
+                    btnHtml = `<button class="service-btn" style="opacity: 0.4; cursor: not-allowed; border-color: rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); color: var(--text-secondary);" disabled>System Maintenance</button>`;
+                } else if (g.maintenance) {
+                    btnHtml = `<button class="service-btn" style="opacity: 0.4; cursor: not-allowed; border-color: rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); color: var(--text-secondary);" disabled>Maintenance</button>`;
+                } else if (g.status === 'online') {
                     const isWeb = g.port || g.name.toLowerCase().includes("proxmox") || g.name.toLowerCase().includes("assistant") || g.name.toLowerCase().includes("plex") || g.name.toLowerCase().includes("nas") || g.name.toLowerCase().includes("wireguard") || g.name.toLowerCase().includes("wg-easy") || g.name.toLowerCase().includes("wg easy");
                     const isGame = !isWeb;
                     let actionBtn = '';
@@ -1250,7 +1287,9 @@
                 }
 
                 let msgHtml = '';
-                if (g.message) {
+                if (g.maintenance) {
+                    msgHtml = `<div class="service-desc" style="font-size: 12px; color: #fdba74; margin-bottom: 16px; width: 100%; text-align: left; background: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.15); padding: 8px 12px; border-radius: 8px; font-weight: 400; line-height: 1.4; word-break: break-all;">🔧 ${g.maintenance}</div>`;
+                } else if (g.message) {
                     msgHtml = `<div class="service-desc" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; width: 100%; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; font-weight: 400; line-height: 1.4; word-break: break-all;">${g.message}</div>`;
                 }
 
@@ -1498,6 +1537,44 @@
                     serviceName = data.name || "Homelab Service";
                     servicePort = data.port || "";
                     serviceIp = data.ip || "";
+
+                    if (data.maintenance_system) {
+                        clearInterval(progressInterval);
+                        serviceLoadingBlock.style.display = 'block';
+                        servicePasscodeBlock.style.display = 'none';
+                        wakingTitle.innerText = `System Maintenance`;
+                        wakingDesc.innerHTML = `This system is currently offline due to system-wide maintenance:<br><br><strong style="color: #fbbf24; background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.15); padding: 12px 18px; border-radius: 14px; display: inline-block; text-align: left; width: 100%; font-weight: 500; font-size: 13px;">🔧 ${data.maintenance_system}</strong>`;
+                        
+                        avatarEl.classList.remove('online');
+                        wakingDot.className = "status-dot";
+                        wakingDot.style.background = "#fbbf24";
+                        wakingDot.style.boxShadow = "0 0 8px #fbbf24";
+                        wakingDot.style.animation = "none";
+                        wakingBadgeText.innerText = "MAINTENANCE";
+                        document.querySelector('.progress-container').style.display = 'none';
+                        
+                        setTimeout(() => checkSingleService(false), 8000);
+                        return;
+                    }
+
+                    if (data.maintenance) {
+                        clearInterval(progressInterval);
+                        serviceLoadingBlock.style.display = 'block';
+                        servicePasscodeBlock.style.display = 'none';
+                        wakingTitle.innerText = `${serviceName} Maintenance`;
+                        wakingDesc.innerHTML = `This service is currently offline due to maintenance:<br><br><strong style="color: #fdba74; background: rgba(249, 115, 22, 0.05); border: 1px solid rgba(249, 115, 22, 0.15); padding: 12px 18px; border-radius: 14px; display: inline-block; text-align: left; width: 100%; font-weight: 500; font-size: 13px;">🔧 ${data.maintenance}</strong>`;
+                        
+                        avatarEl.classList.remove('online');
+                        wakingDot.className = "status-dot";
+                        wakingDot.style.background = "#f97316";
+                        wakingDot.style.boxShadow = "0 0 8px #f97316";
+                        wakingDot.style.animation = "none";
+                        wakingBadgeText.innerText = "MAINTENANCE";
+                        document.querySelector('.progress-container').style.display = 'none';
+                        
+                        setTimeout(() => checkSingleService(false), 8000);
+                        return;
+                    }
 
                     if (data.host_status === 'powered_off') {
                         clearInterval(progressInterval);

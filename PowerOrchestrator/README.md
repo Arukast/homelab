@@ -351,6 +351,13 @@ Once active, search for your bot in Telegram and start interacting.
   * `/ctstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
   * `/ctstop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
   * `/ctrestart <vmid>` - Restarts the specific VM or container.
+* **Maintenance Control**:
+  * `/maintenance` (or `/maintenance status`) - Check current system and service maintenance status.
+  * `/maintenance system <reason>` - Put the system in maintenance mode and show `<reason>` banner on dashboard.
+  * `/maintenance system off` - Remove system-wide maintenance mode.
+  * `/maintenance service <vmid> <reason>` - Put a specific service in maintenance mode with a reason.
+  * `/maintenance service <vmid> off` - Remove service-specific maintenance mode.
+  * `/maintenance off` - Clear all active system-wide and service maintenance modes.
 
 > [!IMPORTANT]
 > **Manual vs. Automated Sleep/Shutdown Design:**
@@ -376,6 +383,7 @@ To enable the auto-completion menu for commands in Telegram:
    ctstart - Start a specific VM/container (e.g. /ctstart 101)
    ctstop - Stop a specific VM/container (e.g. /ctstop 101)
    ctrestart - Restart a specific VM/container (e.g. /ctrestart 101)
+   maintenance - Check and control system or service maintenance
    ```
 
 ---
