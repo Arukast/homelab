@@ -53,6 +53,13 @@ TRIGGER=$(get_query_param "trigger")
 CODE=$(url_decode "$CODE_RAW")
 PORTAL_CODE=$(url_decode "$PORTAL_CODE_RAW")
 
+# --- Centralized Maintenance Checks ---
+MAINT_DIR="/etc/homelab_maintenance"
+SYS_MAINT=""
+if [ -f "${MAINT_DIR}/system" ]; then
+    SYS_MAINT=$(cat "${MAINT_DIR}/system" | tr -d '\n\r')
+fi
+
 # --- DDoS Guard & Rate Limiter ---
 RATE_DIR="/tmp/status_rate_limit"
 mkdir -p "$RATE_DIR"
@@ -237,9 +244,11 @@ if [ -z "$VMID" ]; then
         fi
     fi
     
+    SYS_MAINT_ESCAPED=$(escape_json "$SYS_MAINT")
     echo "{"
     echo "  \"status\": \"online\","
     echo "  \"is_private\": ${USER_IS_ACTUALLY_PRIVATE},"
+    echo "  \"maintenance_system\": \"${SYS_MAINT_ESCAPED}\","
     if [ "$HOST_STATUS" = "online" ] && [ -n "$cpu" ]; then
         echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\", \"cpu\": ${cpu}, \"ram_used\": ${ram_used}, \"ram_total\": ${ram_total}, \"temp\": ${temp}, \"disk\": ${disk}},"
     else
@@ -319,6 +328,12 @@ if [ -z "$VMID" ]; then
         if [ "$g_verified" -eq 1 ]; then
             g_msg=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2- 2>/dev/null)
         fi
+        g_maint=""
+        if [ -f "${MAINT_DIR}/service_${g_vmid}" ]; then
+            g_maint=$(cat "${MAINT_DIR}/service_${g_vmid}" | tr -d '\n\r')
+        fi
+        g_maint_escaped=$(escape_json "$g_maint")
+        
         g_msg_escaped=$(escape_json "$g_msg")
         
         if [ "$first" -eq 0 ]; then
@@ -338,7 +353,7 @@ if [ -z "$VMID" ]; then
             fi
         fi
         
-        echo -n "    {\"vmid\": \"${g_vmid}\", \"name\": \"${g_name_escaped}\", \"status\": \"${g_status}\", \"passcode_required\": ${g_passcode_req}, \"message\": \"${g_msg_escaped}\", \"port\": \"${g_port}\", \"ip\": \"${g_ip}\"}"
+        echo -n "    {\"vmid\": \"${g_vmid}\", \"name\": \"${g_name_escaped}\", \"status\": \"${g_status}\", \"passcode_required\": ${g_passcode_req}, \"message\": \"${g_msg_escaped}\", \"port\": \"${g_port}\", \"ip\": \"${g_ip}\", \"maintenance\": \"${g_maint_escaped}\"}"
     done
     
     # Clean up any leftover ping files for this process
@@ -375,6 +390,14 @@ if is_host_online && [ -n "$GUEST_IP" ]; then
     fi
 fi
 
+# Single Guest Maintenance Checks
+GUEST_MAINT=""
+if [ -f "${MAINT_DIR}/service_${VMID}" ]; then
+    GUEST_MAINT=$(cat "${MAINT_DIR}/service_${VMID}" | tr -d '\n\r')
+fi
+GUEST_MAINT_ESCAPED=$(escape_json "$GUEST_MAINT")
+SYS_MAINT_ESCAPED=$(escape_json "$SYS_MAINT")
+
 # 1. Passcode Lock Check
 PASS_VERIFIED=0
 if [ "$PASSCODE_REQUIRED" = "false" ] || [ "$USER_IS_ACTUALLY_PRIVATE" -eq 1 ]; then
@@ -386,7 +409,7 @@ fi
 
 if [ "$PASS_VERIFIED" -eq 0 ] && [ -n "$CODE" ]; then
     # Incorrect passcode submitted
-    echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+    echo "{\"status\": \"unauthorized\", \"message\": \"Invalid passcode\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
     exit 0
 fi
 
@@ -403,30 +426,40 @@ fi
 
 # 2. Return Status and only return sensitive messages if verified
 if [ "$PASS_VERIFIED" -eq 0 ]; then
-    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"passcode_verified\": false, \"message\": \"\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": true, \"passcode_verified\": false, \"message\": \"\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
     exit 0
 fi
 
 # 3. Code verified! Return status and handle wake triggers
 if [ "$GUEST_ONLINE" -eq 1 ]; then
     rm -f "/tmp/waking_vmid_${VMID}"
-    echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+    echo "{\"status\": \"online\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
     exit 0
 fi
 
 # If actively waking and trigger not requested (or already triggered), bypass execution
 if [ "$GUEST_WAKING" -eq 1 ]; then
-    echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+    echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
     exit 0
 fi
 
 # 4. Guest is offline (sleeping). If trigger=1 is not requested, return sleeping but with verified details
 if [ "$TRIGGER" != "1" ]; then
-    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+    echo "{\"status\": \"sleeping\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
     exit 0
 fi
 
 # 5. Guest is offline and trigger=1 requested: Wake it up!
+if [ -n "$SYS_MAINT" ]; then
+    echo "{\"status\": \"blocked\", \"message\": \"System-wide maintenance is active: ${SYS_MAINT_ESCAPED}\"}"
+    exit 0
+fi
+
+if [ -n "$GUEST_MAINT" ]; then
+    echo "{\"status\": \"blocked\", \"message\": \"Service is under maintenance: ${GUEST_MAINT_ESCAPED}\"}"
+    exit 0
+fi
+
 enforce_wol_cooldown
 
 # Mark as waking
@@ -477,5 +510,5 @@ etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
     rm -f "/tmp/waking_vmid_${VMID}"
 ) >/dev/null 2>&1 </dev/null &
 
-echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\"}"
+echo "{\"status\": \"waking\", \"name\": \"$GUEST_NAME_ESCAPED\", \"vmid\": \"$VMID\", \"passcode_required\": ${PASSCODE_REQUIRED}, \"passcode_verified\": true, \"message\": \"$GUEST_MESSAGE_ESCAPED\", \"port\": \"$GUEST_PORT\", \"ip\": \"$GUEST_IP\", \"host_status\": \"$HOST_STATUS\", \"maintenance_system\": \"$SYS_MAINT_ESCAPED\", \"maintenance\": \"$GUEST_MAINT_ESCAPED\"}"
 exit 0
