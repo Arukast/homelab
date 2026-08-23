@@ -478,7 +478,7 @@ else
 fi
 
 # WOL Host
-etherwake -i br-lan "$HOST_MAC" >/dev/null 2>&1
+etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC" >/dev/null 2>&1
 
 # Asynchronous Guest Resume Loop
 (

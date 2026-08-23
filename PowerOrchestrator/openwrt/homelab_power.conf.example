@@ -26,6 +26,9 @@ HOST_IP="192.168.11.10"
 # The physical MAC address of the Proxmox VE host (used for Wake-on-LAN)
 HOST_MAC="aa:bb:cc:dd:ee:ff"
 
+# The network interface on OpenWrt for LAN / WoL (defaults to br-lan, e.g. br-lan.1 for VLAN 1)
+LAN_INTERFACE="br-lan"
+
 # Path to the Dropbear/OpenSSH private key used for passwordless SSH access to Proxmox
 SSH_KEY_PATH="/etc/dropbear/id_dropbear"
 

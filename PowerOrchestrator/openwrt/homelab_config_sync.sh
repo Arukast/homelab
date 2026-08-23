@@ -65,7 +65,7 @@ fi
 ROUTER_IP=$(ip route get "$HOST_IP" 2>/dev/null | grep -oE "src [0-9.]+" | awk '{print $2}')
 if [ -z "$ROUTER_IP" ]; then
     # Fallback if route fails
-    ROUTER_IP=$(ip addr show dev br-lan 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}')
+    ROUTER_IP=$(ip addr show dev "${LAN_INTERFACE:-br-lan}" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}')
 fi
 
 if [ -z "$ROUTER_IP" ]; then

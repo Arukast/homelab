@@ -43,10 +43,12 @@ notify() {
     /usr/bin/homelab_notify.sh "$msg" &
 }
 
+IFACE="${LAN_INTERFACE:-br-lan}"
+
 # Apply Static ARP to prevent IP drops while sleeping
 apply_static_arp() {
-    echo "Applying permanent static ARP: $HOST_IP -> $HOST_MAC on br-lan..."
-    ip neigh replace "$HOST_IP" lladdr "$HOST_MAC" dev br-lan nud permanent
+    echo "Applying permanent static ARP: $HOST_IP -> $HOST_MAC on $IFACE..."
+    ip neigh replace "$HOST_IP" lladdr "$HOST_MAC" dev "$IFACE" nud permanent
 }
 
 # Apply Nat Redirect rules dynamically
@@ -155,7 +157,7 @@ manage_guest_listeners() {
             if pgrep -f "guest_wake_listener.sh $GUEST_IP " >/dev/null 2>&1; then
                 echo "Guest [$VMID] ($GUEST_IP) came online. Terminating listener..."
                 pkill -f "guest_wake_listener.sh $GUEST_IP "
-                ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
+                ip addr del "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
             fi
         else
             for sub_port in $(echo "$PORT_RAW" | tr '+' ' '); do
@@ -176,7 +178,7 @@ stop_guest_listeners() {
     if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
         for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
             GUEST_IP=$(echo "$entry" | cut -d':' -f2)
-            ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
+            ip addr del "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
         done
     fi
 }
@@ -188,7 +190,7 @@ cleanup() {
     stop_game_listeners
     stop_guest_listeners
     # Remove permanent static ARP (return to dynamic ARP)
-    ip neigh del "$HOST_IP" dev br-lan 2>/dev/null
+    ip neigh del "$HOST_IP" dev "$IFACE" 2>/dev/null
     rm -f "/var/run/power_proxy_daemon.pid" 2>/dev/null
     exit 0
 }

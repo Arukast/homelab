@@ -38,15 +38,17 @@ fi
 
 SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
 
+IFACE="${LAN_INTERFACE:-br-lan}"
+
 # 1. Bind Guest IP alias to Router interface so the router answers ARPs for it
-echo "Binding IP alias $GUEST_IP/32 to br-lan..."
-ip addr add "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
+echo "Binding IP alias $GUEST_IP/32 to $IFACE..."
+ip addr add "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
 
 # Clean up rule and netcat on signal
 cleanup() {
     echo "Cleaning up IP alias $GUEST_IP/32 and port listeners..."
     [ -n "$NC_PID" ] && kill "$NC_PID" 2>/dev/null
-    ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
+    ip addr del "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
     exit 0
 }
 trap cleanup SIGTERM SIGINT
@@ -66,13 +68,13 @@ wait "$NC_PID"
 
 # 3. Connection intercepted! Remove IP alias instantly to restore native routing
 echo "Connection intercepted! Restoring native routing..."
-ip addr del "${GUEST_IP}/32" dev br-lan >/dev/null 2>&1 || true
+ip addr del "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
 
 # 4. Trigger Wake-on-Demand Sequence
 # Check if Proxmox host is awake. If not awake, wake the entire host first.
 if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
     echo "Proxmox Host ($HOST_IP) is offline. Dispatching Wake-on-LAN..."
-    etherwake -i br-lan "$HOST_MAC"
+    etherwake -i "$IFACE" "$HOST_MAC"
     
     # Wait for Proxmox host to boot up
     echo "Waiting for Proxmox host to boot up..."

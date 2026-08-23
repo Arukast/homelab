@@ -133,7 +133,7 @@ process_command() {
             
         /wake)
             send_message "$chat_id" "$(expand_msg "$MSG_BOT_WOL_SENT")"
-            etherwake -i br-lan "$HOST_MAC"
+            etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
             send_message "$chat_id" "$MSG_BOT_WOL_DISPATCHED"
             ;;
             
@@ -349,7 +349,7 @@ ${vms}"
                 # Check if host is offline, if so wake it first
                 if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
                     send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
-                    etherwake -i br-lan "$HOST_MAC"
+                    etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
                     
                     # Wait for host to come online and respond to SSH
                     send_message "$chat_id" "Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."

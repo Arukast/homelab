@@ -62,7 +62,7 @@ wait "$NC_PID"
 echo "Player connection detected on port $PORT_RAW. Initiating host wake sequence..."
 
 # 1. Dispatch Wake-on-LAN
-etherwake -i br-lan "$HOST_MAC"
+etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
 
 # 2. Dispatch notifications
 MSG=$(eval echo "\"$MSG_WAKE_GAME_PLAYER\"")
