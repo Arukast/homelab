@@ -421,12 +421,14 @@ ${vms}"
                     return
                 fi
                 
-                local start_out=$($SSH_CMD "pct start $arg1" 2>&1)
+                local start_out
+                start_out=$($SSH_CMD "pct start $arg1" 2>&1)
+                local ret=$?
                 local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-                if [ -n "$clean_out" ] && echo "$clean_out" | grep -iqE "error|does not exist|failed|invalid"; then
+                if [ $ret -ne 0 ]; then
                     send_message "$chat_id" "[Error] Failed to start LXC ID $arg1:
 \`\`\`
-${clean_out}
+${clean_out:-Command failed with exit code $ret}
 \`\`\`"
                 else
                     send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_SUCCESS")
@@ -459,12 +461,14 @@ ${clean_out:-Started successfully}
                 return
             fi
             
-            local stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
+            local stop_out
+            stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
+            local ret=$?
             local clean_stop=$(echo "$stop_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            if [ -n "$clean_stop" ] && echo "$clean_stop" | grep -iqE "error|does not exist|failed|invalid"; then
+            if [ $ret -ne 0 ]; then
                 send_message "$chat_id" "[Error] Failed to stop LXC ID $arg1:
 \`\`\`
-${clean_stop}
+${clean_stop:-Command failed with exit code $ret}
 \`\`\`"
             else
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_SUCCESS")
@@ -496,12 +500,14 @@ ${clean_stop:-Stop signal dispatched}
                 return
             fi
             
-            local res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
+            local res_out
+            res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
+            local ret=$?
             local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            if [ -n "$clean_res" ] && echo "$clean_res" | grep -iqE "error|does not exist|failed|invalid"; then
+            if [ $ret -ne 0 ]; then
                 send_message "$chat_id" "[Error] Failed to restart LXC ID $arg1:
 \`\`\`
-${clean_res}
+${clean_res:-Command failed with exit code $ret}
 \`\`\`"
             else
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
@@ -559,12 +565,14 @@ ${clean_res:-Restart signal dispatched}
                     return
                 fi
                 
-                local start_out=$($SSH_CMD "qm start $arg1" 2>&1)
+                local start_out
+                start_out=$($SSH_CMD "qm start $arg1" 2>&1)
+                local ret=$?
                 local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-                if [ -n "$clean_out" ] && echo "$clean_out" | grep -iqE "error|does not exist|failed|invalid"; then
+                if [ $ret -ne 0 ]; then
                     send_message "$chat_id" "[Error] Failed to start VM ID $arg1:
 \`\`\`
-${clean_out}
+${clean_out:-Command failed with exit code $ret}
 \`\`\`"
                 else
                     send_message "$chat_id" "[Success] VM $arg1 start response:
@@ -597,12 +605,14 @@ ${clean_out:-Started successfully}
                 return
             fi
             
-            local stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
+            local stop_out
+            stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
+            local ret=$?
             local clean_stop=$(echo "$stop_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            if [ -n "$clean_stop" ] && echo "$clean_stop" | grep -iqE "error|does not exist|failed|invalid"; then
+            if [ $ret -ne 0 ]; then
                 send_message "$chat_id" "[Error] Failed to stop VM ID $arg1:
 \`\`\`
-${clean_stop}
+${clean_stop:-Command failed with exit code $ret}
 \`\`\`"
             else
                 send_message "$chat_id" "[Success] VM $arg1 stop response:
@@ -634,12 +644,14 @@ ${clean_stop:-Shutdown signal dispatched}
                 return
             fi
             
-            local res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
+            local res_out
+            res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
+            local ret=$?
             local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            if [ -n "$clean_res" ] && echo "$clean_res" | grep -iqE "error|does not exist|failed|invalid"; then
+            if [ $ret -ne 0 ]; then
                 send_message "$chat_id" "[Error] Failed to restart VM ID $arg1:
 \`\`\`
-${clean_res}
+${clean_res:-Command failed with exit code $ret}
 \`\`\`"
             else
                 send_message "$chat_id" "[Success] VM $arg1 restart response:
