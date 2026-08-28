@@ -41,7 +41,26 @@ if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
     exit 1
 fi
 
-SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+HOST_SSH_USER="${HOST_SSH_USER:-root}"
+SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
+
+# Multi-stage Host Liveness Probe (ICMP ping + Dropbear SSH + WebUI curl fallback)
+is_host_alive() {
+    if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        return 0
+    fi
+    if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -k -s --connect-timeout 1 "https://${HOST_IP}:8006" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 1 "http://${HOST_IP}:80" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
 
 # Helper to dynamically evaluate/expand strings containing variables
 expand_msg() {
@@ -49,23 +68,37 @@ expand_msg() {
     eval echo "\"$raw_msg\""
 }
 
-# Helper to send messages to Telegram
+# Helper to send messages to Telegram with Markdown auto-fallback
 send_message() {
     local chat_id="$1"
     local text="$2"
     local markup="$3"
+    local resp=""
     
     if [ -n "$markup" ]; then
-        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
             --data-urlencode "text=${text}" \
             --data-urlencode "parse_mode=Markdown" \
-            --data-urlencode "reply_markup=${markup}" >/dev/null
+            --data-urlencode "reply_markup=${markup}")
+        # If Markdown failed (e.g. error 400), retry without Markdown formatting as plain text
+        if ! echo "$resp" | grep -q '"ok":true'; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "reply_markup=${markup}" >/dev/null
+        fi
     else
-        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${chat_id}" \
             --data-urlencode "text=${text}" \
-            --data-urlencode "parse_mode=Markdown" >/dev/null
+            --data-urlencode "parse_mode=Markdown")
+        # If Markdown failed, retry without Markdown formatting as plain text
+        if ! echo "$resp" | grep -q '"ok":true'; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "text=${text}" >/dev/null
+        fi
     fi
 }
 
@@ -92,7 +125,7 @@ process_command() {
         /status)
             send_message "$chat_id" "$MSG_BOT_QUERY_STATUS"
             
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 local markup='{"inline_keyboard":[
                     [{"text":"Wake Host","callback_data":"/wake"},{"text":"Refresh","callback_data":"/status"}]
                 ]}'
@@ -138,7 +171,7 @@ process_command() {
             ;;
             
         /sleep)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_SLEEP_ALREADY_OFFLINE"
                 return
             fi
@@ -151,7 +184,7 @@ process_command() {
             ;;
             
         /sleepforce)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_SLEEP_ALREADY_OFFLINE"
                 return
             fi
@@ -164,7 +197,7 @@ process_command() {
             ;;
             
         /hostshutdown)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_SHUTDOWN_ALREADY_OFFLINE"
                 return
             fi
@@ -187,7 +220,10 @@ process_command() {
             done
             
             if [ -n "$blocking_guests" ]; then
-                send_message "$chat_id" "*Shutdown Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostshutdownforce\`."
+                local clean_blocking=$(echo "$blocking_guests" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                send_message "$chat_id" "*Shutdown Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *${clean_blocking}*.
+
+Please stop them first, or use \`/hostshutdownforce\`."
                 return
             fi
             
@@ -199,7 +235,7 @@ process_command() {
             ;;
             
         /hostshutdownforce)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_SHUTDOWN_ALREADY_OFFLINE"
                 return
             fi
@@ -211,7 +247,7 @@ process_command() {
             ;;
             
         /hostreboot)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_REBOOT_ALREADY_OFFLINE"
                 return
             fi
@@ -234,7 +270,10 @@ process_command() {
             done
             
             if [ -n "$blocking_guests" ]; then
-                send_message "$chat_id" "*Reboot Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *$blocking_guests*.\n\nPlease stop them first, or use \`/hostrebootforce\`."
+                local clean_blocking=$(echo "$blocking_guests" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                send_message "$chat_id" "*Reboot Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *${clean_blocking}*.
+
+Please stop them first, or use \`/hostrebootforce\`."
                 return
             fi
             
@@ -246,7 +285,7 @@ process_command() {
             ;;
             
         /hostrebootforce)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_REBOOT_ALREADY_OFFLINE"
                 return
             fi
@@ -258,7 +297,7 @@ process_command() {
             ;;
             
         /list)
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_LIST_HOST_OFFLINE"
                 return
             fi
@@ -273,13 +312,13 @@ process_command() {
                 /===LXC===/{flag=1; next}
                 /===VM===/{flag=0}
                 flag && NR>2 && $1 != "VMID" {
-                    print "• LXC [" $1 "] (" $3 "): " $2
+                    print "• LXC #" $1 " (" $3 "): " $2
                 }
             ')
             local vms=$(echo "$payload" | awk '
                 /===VM===/{flag=1; next}
                 flag && NR>2 && $1 != "VMID" {
-                    print "• VM [" $1 "] (" $2 "): " $3
+                    print "• VM #" $1 " (" $2 "): " $3
                 }
             ')
             
@@ -347,7 +386,7 @@ ${vms}"
             # We run the entire waking & starting sequence in the background to prevent daemon blocking
             (
                 # Check if host is offline, if so wake it first
-                if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                if ! is_host_alive; then
                     send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
                     etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
                     
@@ -357,7 +396,7 @@ ${vms}"
                     local success=0
                     local attempt=1
                     while [ $attempt -le 25 ]; do
-                        if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+                        if is_host_alive; then
                             if $SSH_CMD "echo OK" >/dev/null 2>&1; then
                                 success=1
                                 break
@@ -378,19 +417,29 @@ ${vms}"
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
                 # Detect if VM or LXC and start
                 local start_out
+                local node_type="LXC"
                 if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
                     start_out=$($SSH_CMD "pct start $arg1" 2>&1)
                 elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
+                    node_type="VM"
                     start_out=$($SSH_CMD "qm start $arg1" 2>&1)
                 else
                     send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_NOT_FOUND")"
                     return
                 fi
                 
-                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_SUCCESS")
+                local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                if [ -n "$clean_out" ] && echo "$clean_out" | grep -iqE "error|does not exist|failed|invalid"; then
+                    send_message "$chat_id" "[Error] Failed to start $node_type ID $arg1:
 \`\`\`
-${start_out:-Started successfully}
+${clean_out}
 \`\`\`"
+                else
+                    send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_SUCCESS")
+\`\`\`
+${clean_out:-Started successfully}
+\`\`\`"
+                fi
             ) >/dev/null 2>&1 </dev/null &
             ;;
             
@@ -405,26 +454,36 @@ ${start_out:-Started successfully}
                 return
             fi
             
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_CT_STOP_HOST_OFFLINE"
                 return
             fi
             
             send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_STOPPING")"
             local stop_out
+            local node_type="LXC"
             if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
                 stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
             elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
+                node_type="VM"
                 stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
             else
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_NOT_FOUND")"
                 return
             fi
             
-            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_SUCCESS")
+            local clean_stop=$(echo "$stop_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            if [ -n "$clean_stop" ] && echo "$clean_stop" | grep -iqE "error|does not exist|failed|invalid"; then
+                send_message "$chat_id" "[Error] Failed to stop $node_type ID $arg1:
 \`\`\`
-${stop_out:-Stop signal dispatched}
+${clean_stop}
 \`\`\`"
+            else
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_SUCCESS")
+\`\`\`
+${clean_stop:-Stop signal dispatched}
+\`\`\`"
+            fi
             ;;
             
         /ctrestart)
@@ -438,26 +497,36 @@ ${stop_out:-Stop signal dispatched}
                 return
             fi
             
-            if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+            if ! is_host_alive; then
                 send_message "$chat_id" "$MSG_BOT_CT_RESTART_HOST_OFFLINE"
                 return
             fi
             
             send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_RESTARTING")"
             local res_out
+            local node_type="LXC"
             if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
                 res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
             elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
+                node_type="VM"
                 res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
             else
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_NOT_FOUND")"
                 return
             fi
             
-            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
+            local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            if [ -n "$clean_res" ] && echo "$clean_res" | grep -iqE "error|does not exist|failed|invalid"; then
+                send_message "$chat_id" "[Error] Failed to restart $node_type ID $arg1:
 \`\`\`
-${res_out:-Restart signal dispatched}
+${clean_res}
 \`\`\`"
+            else
+                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
+\`\`\`
+${clean_res:-Restart signal dispatched}
+\`\`\`"
+            fi
             ;;
             
         /maintenance)
@@ -524,6 +593,9 @@ ${res_out:-Restart signal dispatched}
 OFFSET=0
 echo "Starting Homelab Telegram Bot Daemon..."
 
+# Clear any active webhook so long polling functions reliably
+curl -s "https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook" >/dev/null 2>&1
+
 while true; do
     # Long polling with a 30s timeout
     UPDATES=$(curl -s --max-time 35 "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${OFFSET}&timeout=30")
@@ -536,13 +608,18 @@ while true; do
     # Check if OK
     OK=$(echo "$UPDATES" | jsonfilter -e '@.ok')
     if [ "$OK" != "true" ]; then
+        echo "Telegram API Error response: $UPDATES"
         sleep 10
         continue
     fi
     
     # Get total count of updates
-    COUNT=$(echo "$UPDATES" | jsonfilter -e '@.result[*].update_id' 2>/dev/null | wc -l)
-    if [ -z "$COUNT" ] || [ "$COUNT" -eq 0 ]; then
+    RAW_IDS=$(echo "$UPDATES" | jsonfilter -e '@.result[*].update_id' 2>/dev/null)
+    if [ -z "$RAW_IDS" ]; then
+        continue
+    fi
+    COUNT=$(echo "$RAW_IDS" | grep -c .)
+    if [ "$COUNT" -eq 0 ]; then
         continue
     fi
     
@@ -592,10 +669,20 @@ while true; do
                         send_message "$CHAT_ID" "$(expand_msg "$MSG_BOT_UNAUTHORIZED")"
                     fi
                 else
-                    # Only execute commands starting with a slash
+                    # Execute commands starting with a slash
                     if echo "$CMD_TEXT" | grep -qE "^/"; then
                         echo "Running command: $CMD_TEXT from authorized User ID: $USER_ID"
                         process_command "$CMD_TEXT" "$CHAT_ID"
+                    elif [ "$CHAT_ID" = "$USER_ID" ]; then
+                        # In private chat, if authorized user sends plain text (e.g. 'status', 'help', 'hi'), show command menu or execute match
+                        echo "Received non-slash message '$CMD_TEXT' from authorized User ID: $USER_ID. Replying with command menu."
+                        case "$(echo "$CMD_TEXT" | tr 'A-Z' 'a-z')" in
+                            status) process_command "/status" "$CHAT_ID" ;;
+                            list|vms|lxcs) process_command "/list" "$CHAT_ID" ;;
+                            wake|on) process_command "/wake" "$CHAT_ID" ;;
+                            sleep|off) process_command "/sleep" "$CHAT_ID" ;;
+                            *) process_command "/help" "$CHAT_ID" ;;
+                        esac
                     fi
                 fi
             fi

@@ -32,6 +32,12 @@ LAN_INTERFACE="br-lan"
 # Path to the Dropbear/OpenSSH private key used for passwordless SSH access to Proxmox
 SSH_KEY_PATH="/etc/dropbear/id_dropbear"
 
+# SSH port of the Proxmox VE host (change if you use a non-standard SSH port, defaults to 22)
+HOST_SSH_PORT="22"
+
+# SSH user on Proxmox VE host (defaults to "root", e.g. "adminuser")
+HOST_SSH_USER="root"
+
 # --- Network Wake-on-Demand Ports ---
 # Comma-separated list of HTTP TCP ports on the Proxmox host that should be intercepted 
 # and redirected to the beautiful local waking page (port 8080) when Proxmox is sleeping.
@@ -149,7 +155,14 @@ VM_SUSPEND_METHOD="shutdown"
 # Processes that block host shutdown/sleep
 PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
 
-# Time windows where the host must stay awake (e.g. "Mon-Fri:18:00-00:00")
+# Time windows where the host must stay awake (e.g. "Mon-Fri:18:00-00:00" or "Mon-Sun:05:00-23:00")
+# - During this window: The Proxmox host skips idle checks and will NOT suspend automatically.
+# - Outside this window: The Proxmox host performs idle checks and auto-suspends when idle.
+# - Note: ACTIVE_TIME_WINDOWS alone does NOT power on/wake the host when the window starts (since host is asleep).
+#   To automatically wake the host at the start time (e.g. 05:00 AM daily), schedule a cron job on OpenWrt:
+#   1. Run 'crontab -e' on OpenWrt
+#   2. Add: 0 5 * * * etherwake -b -i br-lan <HOST_MAC>
+#   3. Ensure cron service is enabled: /etc/init.d/cron enable && /etc/init.d/cron start
 ACTIVE_TIME_WINDOWS=""
 
 # Logging settings for Proxmox host

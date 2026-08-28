@@ -43,7 +43,27 @@ notify() {
     /usr/bin/homelab_notify.sh "$msg" &
 }
 
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+HOST_SSH_USER="${HOST_SSH_USER:-root}"
+SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 IFACE="${LAN_INTERFACE:-br-lan}"
+
+# Multi-stage Host Liveness Probe (ICMP ping + Dropbear SSH + WebUI curl fallback)
+is_host_alive() {
+    if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        return 0
+    fi
+    if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -k -s --connect-timeout 1 "https://${HOST_IP}:8006" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 1 "http://${HOST_IP}:80" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
 
 # Apply Static ARP to prevent IP drops while sleeping
 apply_static_arp() {
@@ -203,7 +223,7 @@ apply_static_arp
 
 # Loop
 while true; do
-    if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+    if is_host_alive; then
         # Host is ONLINE
         FAILED_PINGS=0
         if [ "$CURRENT_STATE" != "UP" ]; then

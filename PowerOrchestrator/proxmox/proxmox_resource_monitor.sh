@@ -140,18 +140,22 @@ total=$((a+b+c+d+e+f+g+h+i+j))
 idle=$((d+e))
 diff_total=$((total - prev_total))
 diff_idle=$((idle - prev_idle))
-if [ "$diff_total" -eq 0 ]; then
+if [ "$diff_total" -le 0 ]; then
     CPU_PCT=0
 else
-    CPU_PCT=$(( 100 * (diff_total - diff_idle) / diff_total ))
+    diff_used=$((diff_total - diff_idle))
+    [ "$diff_used" -lt 0 ] && diff_used=0
+    CPU_PCT=$(( 100 * diff_used / diff_total ))
 fi
+[ "$CPU_PCT" -gt 100 ] && CPU_PCT=100
 
 CPU_CRITICAL=0
 [ "$CPU_PCT" -gt "$MONITOR_CPU_THRESHOLD_PCT" ] && CPU_CRITICAL=1
 check_metric "cpu" "$CPU_PCT" "$MONITOR_CPU_THRESHOLD_PCT" "$CPU_CRITICAL" "$MSG_MONITOR_CPU_ALERT" "$MSG_MONITOR_CPU_OK"
 
 # --- 2. Check RAM Utilization ---
-RAM_PCT=$(free | awk '/^Mem:/ {print int(($3 / $2) * 100)}')
+RAM_PCT=$(free | awk '/^Mem:/ {if ($2 > 0) print int(($3 / $2) * 100); else print 0}')
+[ -z "$RAM_PCT" ] && RAM_PCT=0
 RAM_CRITICAL=0
 [ "$RAM_PCT" -gt "$MONITOR_RAM_THRESHOLD_PCT" ] && RAM_CRITICAL=1
 check_metric "ram" "$RAM_PCT" "$MONITOR_RAM_THRESHOLD_PCT" "$RAM_CRITICAL" "$MSG_MONITOR_RAM_ALERT" "$MSG_MONITOR_RAM_OK"

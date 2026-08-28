@@ -36,7 +36,9 @@ if [ "$PORT_NUM" != "$PORT_RAW" ]; then
 fi
 [ -z "$PROTO" ] && PROTO="tcp"
 
-SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+HOST_SSH_USER="${HOST_SSH_USER:-root}"
+SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 
 IFACE="${LAN_INTERFACE:-br-lan}"
 
@@ -72,14 +74,30 @@ ip addr del "${GUEST_IP}/32" dev "$IFACE" >/dev/null 2>&1 || true
 
 # 4. Trigger Wake-on-Demand Sequence
 # Check if Proxmox host is awake. If not awake, wake the entire host first.
-if ! ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+is_host_alive() {
+    if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        return 0
+    fi
+    if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -k -s --connect-timeout 1 "https://${HOST_IP}:8006" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 1 "http://${HOST_IP}:80" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+if ! is_host_alive; then
     echo "Proxmox Host ($HOST_IP) is offline. Dispatching Wake-on-LAN..."
     etherwake -i "$IFACE" "$HOST_MAC"
     
     # Wait for Proxmox host to boot up
     echo "Waiting for Proxmox host to boot up..."
     while true; do
-        if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
+        if is_host_alive; then
             break
         fi
         sleep 2

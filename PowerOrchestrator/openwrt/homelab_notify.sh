@@ -39,10 +39,18 @@ if [ -n "$BOT_TOKEN" ] && [ "$BOT_TOKEN" != "YOUR_TELEGRAM_BOT_TOKEN" ]; then
             fi
         fi
         
-        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${chat}" \
-            --data-urlencode "text=${MSG}" \
-            --data-urlencode "parse_mode=Markdown" >/dev/null &
+        (
+            resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${chat}" \
+                --data-urlencode "text=${MSG}" \
+                --data-urlencode "parse_mode=Markdown")
+            # If Markdown parsing fails (e.g. unescaped entities/error 400), retry without parse_mode
+            if ! echo "$resp" | grep -q '"ok":true'; then
+                curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                    --data-urlencode "chat_id=${chat}" \
+                    --data-urlencode "text=${MSG}" >/dev/null
+            fi
+        ) &
     done
 fi
 
@@ -57,11 +65,20 @@ if [ "$DISABLE_NOTIFICATIONS" != "1" ] && [ -n "$DISCORD_WEBHOOK_URL" ]; then
         color=9133302 # Purple/Indigo
     fi
     
-    clean_msg=$(echo "$MSG" | sed 's/"/\\"/g')
+    clean_msg=$(printf '%s' "$MSG" | awk 'BEGIN {ORS="";} {
+        gsub(/\\/, "\\\\");
+        gsub(/"/, "\\\"");
+        gsub(/\r/, "");
+        gsub(/\t/, "\\t");
+        if (NR > 1) printf "\\n";
+        printf "%s", $0;
+    }')
     payload="{\"embeds\":[{\"title\":\"Power Monitor Notification\",\"description\":\"${clean_msg}\",\"color\":${color},\"footer\":{\"text\":\"Arukast Homelab Portal\"}}]}"
     
     for url in $(echo "$DISCORD_WEBHOOK_URL" | tr ',' ' '); do
-        curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
+        if [ -n "$url" ]; then
+            curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$url" >/dev/null &
+        fi
     done
 fi
 

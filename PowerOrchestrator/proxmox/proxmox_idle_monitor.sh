@@ -12,7 +12,8 @@ CPU_THRESHOLD="0.15"
 SCALE_CPU_THRESHOLD_BY_CORES=1
 NET_INTERFACE="vmbr0"
 NET_THRESHOLD_KBPS="50"
-MONITORED_PORTS="25565,32400,8006,8123,22"
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+MONITORED_PORTS="25565,32400,8006,8123,${HOST_SSH_PORT}"
 LXC_SUSPEND_METHOD="suspend"
 VM_SUSPEND_METHOD="suspend"
 PROTECTED_PROCESSES="vzdump qm pct rsync proxmox-backup-client apt-get dpkg"
@@ -79,17 +80,17 @@ is_in_active_window() {
     local curr_hour=$(date +%H)
     local curr_min=$(date +%M)
     
-    # Strip leading zeros
-    curr_hour=${curr_hour#0}
-    curr_min=${curr_min#0}
-    local curr_time_m=$(( (curr_hour ? curr_hour : 0) * 60 + (curr_min ? curr_min : 0) ))
+    # Safely convert to integer minutes of day using base-10
+    local ch=$((10#$curr_hour))
+    local cm=$((10#$curr_min))
+    local curr_time_m=$(( ch * 60 + cm ))
     
     for window in $(echo "$ACTIVE_TIME_WINDOWS" | tr ',' ' '); do
         local days=""
         local times=""
         if echo "$window" | grep -q ":"; then
-            days=$(echo "$window" | cut -d':' -f1)
-            times=$(echo "$window" | cut -d':' -f2)
+            days="${window%%:*}"
+            times="${window#*:}"
         else
             days="All"
             times="$window"
@@ -100,8 +101,8 @@ is_in_active_window() {
         if [ "$days" = "All" ]; then
             day_match=1
         elif echo "$days" | grep -q "-"; then
-            local start_day=$(echo "$days" | cut -d'-' -f1)
-            local end_day=$(echo "$days" | cut -d'-' -f2)
+            local start_day="${days%%-*}"
+            local end_day="${days#*-}"
             local start_num=$(day_to_num "$start_day")
             local end_num=$(day_to_num "$end_day")
             
@@ -122,28 +123,39 @@ is_in_active_window() {
         
         [ "$day_match" -eq 0 ] && continue
         
-        # Parse time range
-        local start_t=$(echo "$times" | cut -d'-' -f1)
-        local end_t=$(echo "$times" | cut -d'-' -f2)
+        # Parse time range (e.g. 05:00-23:00)
+        # NOTE: %%-* would greedily strip too much (e.g. "05:00-23:00" -> "05")
+        # Use cut to safely split on the hyphen separating HH:MM-HH:MM
+        local start_t
+        local end_t
+        start_t=$(echo "$times" | cut -d'-' -f1)
+        end_t=$(echo "$times" | cut -d'-' -f2)
         
-        local sh=$(echo "$start_t" | cut -d':' -f1)
-        local sm=$(echo "$start_t" | cut -d':' -f2)
-        local eh=$(echo "$end_t" | cut -d':' -f1)
-        local em=$(echo "$end_t" | cut -d':' -f2)
+        local sh="${start_t%%:*}"
+        local sm="${start_t#*:}"
+        local eh="${end_t%%:*}"
+        local em="${end_t#*:}"
         
-        sh=${sh#0}
-        sm=${sm#0}
-        eh=${eh#0}
-        em=${em#0}
+        [ -z "$sh" ] && sh=0
+        [ -z "$sm" ] && sm=0
+        [ -z "$eh" ] && eh=0
+        [ -z "$em" ] && em=0
         
-        local start_m=$(( (sh ? sh : 0) * 60 + (sm ? sm : 0) ))
-        local end_m=$(( (eh ? eh : 0) * 60 + (em ? em : 0) ))
+        local start_h=$((10#$sh))
+        local start_m_part=$((10#$sm))
+        local end_h=$((10#$eh))
+        local end_m_part=$((10#$em))
+        
+        local start_m=$(( start_h * 60 + start_m_part ))
+        local end_m=$(( end_h * 60 + end_m_part ))
         
         if [ "$end_m" -lt "$start_m" ]; then
+            # Window spans midnight (e.g. 18:00-05:00)
             if [ "$curr_time_m" -ge "$start_m" ] || [ "$curr_time_m" -le "$end_m" ]; then
                 return 0
             fi
         else
+            # Normal window within same day (e.g. 05:00-23:00)
             if [ "$curr_time_m" -ge "$start_m" ] && [ "$curr_time_m" -le "$end_m" ]; then
                 return 0
             fi
@@ -296,49 +308,56 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
             log "Guest [$VMID] ($GUEST_IP) ports $PORT_RAW active connections: $CONN_COUNT"
             
             if [ "$CONN_COUNT" -eq 0 ]; then
-                START_TIME=$(grep -E "^${VMID}:" "$STATE_FILE" | cut -d':' -f2)
-                if [ -z "$START_TIME" ]; then
-                    log "Guest [$VMID] is idle. Starting idle timer."
-                    NEW_STATES="${NEW_STATES}${VMID}:${CURRENT_TIME}
-"
+                if [ "$TIMEOUT_MIN" -eq 0 ]; then
+                    # Monitor-only mode (TIMEOUT_MIN=0): active connections block the host,
+                    # but when idle the guest is NEVER auto-slept and does NOT hold back the host.
+                    log "Guest [$VMID] is idle (monitor-only mode, TIMEOUT_MIN=0). Not blocking host sleep."
+                    ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING - 1))
                 else
-                    ELAPSED=$((CURRENT_TIME - START_TIME))
-                    TIMEOUT_SEC=$((TIMEOUT_MIN * 60))
-                    log "Guest [$VMID] has been idle for $ELAPSED seconds (Timeout: $TIMEOUT_SEC seconds)."
-                    
-                    if [ "$ELAPSED" -ge "$TIMEOUT_SEC" ]; then
-                        log "Guest [$VMID] idle timeout reached. Preparing to suspend/stop..."
-                        ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING - 1))
+                    START_TIME=$(grep -E "^${VMID}:" "$STATE_FILE" | cut -d':' -f2)
+                    if [ -z "$START_TIME" ]; then
+                        log "Guest [$VMID] is idle. Starting idle timer."
+                        NEW_STATES="${NEW_STATES}${VMID}:${CURRENT_TIME}
+"
+                    else
+                        ELAPSED=$((CURRENT_TIME - START_TIME))
+                        TIMEOUT_SEC=$((TIMEOUT_MIN * 60))
+                        log "Guest [$VMID] has been idle for $ELAPSED seconds (Timeout: $TIMEOUT_SEC seconds)."
                         
-                        # Resolve friendly name for notifications
-                        GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
-                        [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
-                        TIMEOUT_MIN="$TIMEOUT_MIN"
-                        
-                        if pct status "$VMID" >/dev/null 2>&1; then
-                            if [ "$LXC_SUSPEND_METHOD" = "suspend" ]; then
-                                log "Suspending LXC [$VMID]..."
-                                pct suspend "$VMID"
-                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_SUSPENDED\"")"
+                        if [ "$ELAPSED" -ge "$TIMEOUT_SEC" ]; then
+                            log "Guest [$VMID] idle timeout reached. Preparing to suspend/stop..."
+                            ORCHESTRATED_GUESTS_RUNNING=$((ORCHESTRATED_GUESTS_RUNNING - 1))
+                            
+                            # Resolve friendly name for notifications
+                            GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+                            [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
+                            TIMEOUT_MIN="$TIMEOUT_MIN"
+                            
+                            if pct status "$VMID" >/dev/null 2>&1; then
+                                if [ "$LXC_SUSPEND_METHOD" = "suspend" ]; then
+                                    log "Suspending LXC [$VMID]..."
+                                    pct suspend "$VMID"
+                                    notify "$(eval echo \"$MSG_PROXMOX_GUEST_SUSPENDED\")"
+                                else
+                                    log "Stopping LXC [$VMID]..."
+                                    pct stop "$VMID"
+                                    notify "$(eval echo \"$MSG_PROXMOX_GUEST_STOPPED\")"
+                                fi
                             else
-                                log "Stopping LXC [$VMID]..."
-                                pct stop "$VMID"
-                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_STOPPED\"")"
+                                if [ "$VM_SUSPEND_METHOD" = "suspend" ]; then
+                                    log "Suspending VM [$VMID]..."
+                                    qm suspend "$VMID" --todisk 0
+                                    notify "$(eval echo \"$MSG_PROXMOX_GUEST_SUSPENDED\")"
+                                else
+                                    log "Shutting down VM [$VMID]..."
+                                    qm shutdown "$VMID"
+                                    notify "$(eval echo \"$MSG_PROXMOX_GUEST_STOPPED\")"
+                                fi
                             fi
                         else
-                            if [ "$VM_SUSPEND_METHOD" = "suspend" ]; then
-                                log "Suspending VM [$VMID]..."
-                                qm suspend "$VMID" --todisk 0
-                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_SUSPENDED\"")"
-                            else
-                                log "Shutting down VM [$VMID]..."
-                                qm shutdown "$VMID"
-                                notify "$(eval echo "\"$MSG_PROXMOX_GUEST_STOPPED\"")"
-                            fi
-                        fi
-                    else
-                        NEW_STATES="${NEW_STATES}${VMID}:${START_TIME}
+                            NEW_STATES="${NEW_STATES}${VMID}:${START_TIME}
 "
+                        fi
                     fi
                 fi
             else
@@ -353,6 +372,47 @@ if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
         log "BLOCK: Orchestrated guest(s) are still active or waiting for idle timeout. Host is NOT idle."
         exit 0
     fi
+fi
+
+# 0.5. Check Active Non-Orchestrated / Non-Exempt Running Guests
+RUNNING_LXCS_CHECK=$(pct list 2>/dev/null | awk 'NR>1 && $2=="running" {print $1}')
+RUNNING_VMS_CHECK=$(qm list 2>/dev/null | awk 'NR>1 && $3=="running" {print $1}')
+ALL_RUNNING_GUESTS="$RUNNING_LXCS_CHECK $RUNNING_VMS_CHECK"
+
+BLOCKING_UNMANAGED_GUESTS=""
+for g_vmid in $ALL_RUNNING_GUESTS; do
+    # Check if guest is in GUEST_ORCHESTRATION_MAP
+    is_orchestrated=0
+    if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
+        for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
+            ovmid=$(echo "$entry" | cut -d':' -f1)
+            if [ "$g_vmid" = "$ovmid" ]; then
+                is_orchestrated=1
+                break
+            fi
+        done
+    fi
+    
+    # Check if guest is exempt (e.g. NAS, Pihole)
+    is_exempt=0
+    if [ -n "$EXEMPT_SHUTDOWN_GUESTS" ]; then
+        for evmid in $(echo "$EXEMPT_SHUTDOWN_GUESTS" | tr ',' ' '); do
+            if [ "$g_vmid" = "$evmid" ]; then
+                is_exempt=1
+                break
+            fi
+        done
+    fi
+    
+    if [ "$is_orchestrated" -eq 0 ] && [ "$is_exempt" -eq 0 ]; then
+        BLOCKING_UNMANAGED_GUESTS="$BLOCKING_UNMANAGED_GUESTS $g_vmid"
+    fi
+done
+
+if [ -n "$BLOCKING_UNMANAGED_GUESTS" ]; then
+    clean_unmanaged=$(echo "$BLOCKING_UNMANAGED_GUESTS" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    log "BLOCK: Active non-exempt unmanaged guest(s) are running ($clean_unmanaged). Host is NOT idle."
+    exit 0
 fi
 
 # 1. Check Protected Processes
@@ -422,7 +482,13 @@ else
 fi
 
 # 3. Check Network Connections on Monitored Ports
-for port in $(echo "$MONITORED_PORTS" | tr ',' ' '); do
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+ACTIVE_CHECK_PORTS="$MONITORED_PORTS"
+if [ -n "$HOST_SSH_PORT" ] && ! echo ",$ACTIVE_CHECK_PORTS," | grep -q ",$HOST_SSH_PORT,"; then
+    ACTIVE_CHECK_PORTS="$ACTIVE_CHECK_PORTS,$HOST_SSH_PORT"
+fi
+
+for port in $(echo "$ACTIVE_CHECK_PORTS" | tr ',' ' '); do
     port_num=$(echo "$port" | cut -d'/' -f1)
     proto=$(echo "$port" | cut -d'/' -f2 -s)
     [ -z "$proto" ] && proto="tcp"
@@ -569,23 +635,17 @@ for vmid in $SUSPENDED_LXCS; do
     pct resume "$vmid" >/dev/null 2>&1
 done
 
-# Start stopped/shutdown nodes that are flagged for 'onboot: 1'
+# Start stopped/shutdown nodes
 # Proxmox does not run boot sequence on S3 wake, so we manually start them
-# if they are set to start at boot and were stopped by this script
+# if they were running when this script suspended the host or if onboot is enabled
 for vmid in $STOPPED_LXCS; do
-    ONBOOT=$(pct config "$vmid" | grep -E "^onboot:[[:space:]]*1" -c)
-    if [ "$ONBOOT" -gt 0 ]; then
-        log "LXC [$vmid]: Restarting container (onboot enabled)..."
-        pct start "$vmid" >/dev/null 2>&1
-    fi
+    log "LXC [$vmid]: Restarting container (restoring pre-sleep state)..."
+    pct start "$vmid" >/dev/null 2>&1 || true
 done
 
 for vmid in $SHUTDOWN_VMS; do
-    ONBOOT=$(qm config "$vmid" | grep -E "^onboot:[[:space:]]*1" -c)
-    if [ "$ONBOOT" -gt 0 ]; then
-        log "VM [$vmid]: Restarting VM (onboot enabled)..."
-        qm start "$vmid" >/dev/null 2>&1
-    fi
+    log "VM [$vmid]: Restarting VM (restoring pre-sleep state)..."
+    qm start "$vmid" >/dev/null 2>&1 || true
 done
 
 log "WAKE: All guest nodes successfully restored. Power-saving cycle complete."

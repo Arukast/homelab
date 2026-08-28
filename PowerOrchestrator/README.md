@@ -103,19 +103,31 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    dropbearkey -y -f /etc/dropbear/id_dropbear | head -n 2 | tail -n 1 > /tmp/id_dropbear.pub
    ```
 4. **Append and Restrict the Public Key on Proxmox**:
-   Copy the contents of `/tmp/id_dropbear.pub` and add it to `/root/.ssh/authorized_keys` on your Proxmox host.
+   Copy the contents of `/tmp/id_dropbear.pub` and add it to authorized_keys on your Proxmox host.
    
    > [!IMPORTANT]
-   > **Secure and Restrict Root SSH Access!**
-   > To prevent arbitrary command execution as root on Proxmox, restrict this key to only running our orchestrator commands by prepending the command wrapper options. 
-   > Edit `/root/.ssh/authorized_keys` on Proxmox and make the entry look exactly like this:
+   > **Secure and Restrict SSH Access!**
+   > To prevent arbitrary command execution, restrict this key to only running our orchestrator commands by prepending the command wrapper.
+   >
+   > **For root user (`/root/.ssh/authorized_keys`):**
    > ```text
-   > command="/usr/local/bin/homelab_ssh_wrapper.sh",no-port-forwarding,no-x11-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1... (your Dropbear public key)
+   > command="/usr/local/bin/homelab_ssh_wrapper.sh",no-port-forwarding,no-x11-forwarding,no-agent-forwarding ssh-ed25519 AAAAC3NzaC1... (your Dropbear key)
+   > ```
+   >
+   > **For non-root user (e.g. `/home/adminuser/.ssh/authorized_keys`):**
+   > ```text
+   > command="sudo /usr/local/bin/homelab_ssh_wrapper.sh",no-port-forwarding,no-x11-forwarding,no-agent-forwarding ssh-ed25519 AAAAC3NzaC1... (your Dropbear key)
+   > ```
+   > And add to `/etc/sudoers.d/homelab_power` on Proxmox:
+   > ```text
+   > Defaults:adminuser env_keep += "SSH_ORIGINAL_COMMAND"
+   > adminuser ALL=(root) NOPASSWD: /usr/local/bin/homelab_ssh_wrapper.sh
    > ```
 
 5. **Test SSH connection from OpenWrt to Proxmox**:
    ```bash
-   ssh -i /etc/dropbear/id_dropbear root@192.168.12.10 "echo OK"
+   # Use -p <port> if your Proxmox SSH port is non-standard (e.g. 2213)
+   ssh -i /etc/dropbear/id_dropbear -p 2213 adminuser@10.10.0.10 "echo OK"
    ```
    *(Ensure it connects instantly and returns "OK". Unauthorized arbitrary commands will be blocked with Access Denied.)*
 
@@ -320,6 +332,42 @@ Exposing status queries to the public via Tailscale Funnel poses trigger spam ri
 ### 3. UDP Connection Tracking on Proxmox
 Monitored ports support protocol suffixes (e.g. `MONITORED_PORTS="22,25565/tcp,19132/udp"`). The idle script queries kernel `conntrack` (with native `ss` fallback) to monitor active UDP gaming streams (like Minecraft Bedrock, Valheim, or Unturned), preventing premature host suspension during live sessions.
 
+### 4. Active Time Windows & Scheduled Auto-Wake (OpenWrt Cron)
+You can specify time ranges during which the Proxmox host must remain awake, while enabling automatic sleep during off-hours:
+
+* **Configure Active Awake Windows**:
+  In `/etc/homelab_power.conf` (synced to Proxmox), set `ACTIVE_TIME_WINDOWS`:
+  ```ini
+  ACTIVE_TIME_WINDOWS="Mon-Sun:05:00-23:00"
+  ```
+  *(Supports comma-separated windows like `"Mon-Fri:08:00-17:00,Sat-Sun:09:00-23:00"` or dayless `"08:00-23:00"`)*.
+  * **During the Window (05:00 – 23:00):** Proxmox idle checks are skipped. The server will **NOT** suspend automatically even if idle.
+  * **Outside the Window (23:00 – 05:00):** Proxmox idle checks run as normal, putting the host to sleep (S3) once it is confirmed idle.
+
+* **Schedule Automatic Morning Wake-Up (OpenWrt Cron)**:
+  > [!NOTE]
+  > Because a sleeping/suspended server cannot execute scripts to wake itself up, `ACTIVE_TIME_WINDOWS` alone does not turn the server on at 05:00.
+  > Use your always-on OpenWrt router to send a scheduled Wake-on-LAN (WoL) packet at your desired wake time:
+
+  1. SSH into OpenWrt and open the crontab editor:
+     ```bash
+     crontab -e
+     ```
+  2. Add the scheduled WoL command (e.g., wake every day at 05:00 AM):
+     ```cron
+     0 5 * * * etherwake -b -i br-lan aa:bb:cc:dd:ee:ff
+     ```
+     *(Replace `aa:bb:cc:dd:ee:ff` with your Proxmox server's MAC address from `HOST_MAC` in `/etc/homelab_power.conf`)*.
+  3. Ensure the cron daemon is enabled and running on OpenWrt:
+     ```bash
+     /etc/init.d/cron enable
+     /etc/init.d/cron start
+     ```
+  4. Verify your crontab schedule:
+     ```bash
+     crontab -l
+     ```
+
 ---
 
 ## Verification and Operations Guide
@@ -396,3 +444,19 @@ To enable the auto-completion menu for commands in Telegram:
    Ensure `/etc/dropbear/id_dropbear` on the router has restricted permissions (`chmod 600`). Since Dropbear keys do not support passphrase protection natively, ensure physical security of the router backup files.
 3. **No External Ingress exposure**:
    Because your router is under CGNAT, there are no open WAN ports. The Telegram daemon operates on **pure long-polling outbound sockets** to `api.telegram.org` and does not accept inbound WAN traffic, completely closing the host to external port scans.
+
+---
+
+## Automated Verification & Test Suite
+
+PowerOrchestrator includes a built-in automated test suite to validate all shell syntax, time scheduling logic, math conversions, JSON escape handlers, SSH wrapper dispatch rules, and multi-map guest discovery.
+
+To run the test suite locally or in CI:
+
+```bash
+cd PowerOrchestrator
+./test_suite.sh
+```
+
+All 39 unit tests will execute and report pass/fail status with detailed diagnostic logs.
+

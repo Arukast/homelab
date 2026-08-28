@@ -65,7 +65,8 @@ case "$action" in
             fi
         else
             echo "$msg" > "${MAINT_DIR}/system"
-            notify "🔧 *System Maintenance ENABLED.*\nReason: ${msg}"
+            notify "🔧 *System Maintenance ENABLED.*
+Reason: ${msg}"
             echo "System maintenance enabled: $msg"
         fi
         ;;
@@ -93,7 +94,8 @@ case "$action" in
             fi
         else
             echo "$msg" > "${MAINT_DIR}/service_${vmid}"
-            notify "🔧 *Service Maintenance ENABLED* for VMID ${vmid}.\nReason: ${msg}"
+            notify "🔧 *Service Maintenance ENABLED* for VMID ${vmid}.
+Reason: ${msg}"
             echo "Service $vmid maintenance enabled: $msg"
         fi
         ;;

@@ -19,6 +19,8 @@ if [ -z "$HOST_IP" ]; then
 fi
 
 SSH_KEY_PATH="${SSH_KEY_PATH:-/etc/dropbear/id_dropbear}"
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+HOST_SSH_USER="${HOST_SSH_USER:-root}"
 
 echo "===================================================="
 echo "Homelab Power Orchestrator Configuration Sync Tool"
@@ -37,20 +39,28 @@ else
 fi
 
 # 2. Verify passwordless SSH connection & SSH Wrapper status
-echo "Verifying SSH connection and security wrapper on Proxmox..."
-SSH_OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5"
+echo "Verifying SSH connection and security wrapper on Proxmox (${HOST_SSH_USER}@${HOST_IP}:${HOST_SSH_PORT})..."
+SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 
 # Test simple connectivity with wrapper-allowed echo OK
-SSH_TEST=$(ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "echo OK" 2>/dev/null)
-if [ "$SSH_TEST" != "OK" ]; then
+SSH_TEST_OUTPUT=$($SSH_CMD "echo OK" 2>&1)
+if [ "$SSH_TEST_OUTPUT" != "OK" ]; then
     echo "Error: Cannot establish passwordless SSH trust. SSH command failed." >&2
-    echo "Please ensure the public key is added to Proxmox /root/.ssh/authorized_keys." >&2
+    echo "SSH Output / Error:" >&2
+    echo "----------------------------------------------------" >&2
+    echo "$SSH_TEST_OUTPUT" >&2
+    echo "----------------------------------------------------" >&2
+    echo "Troubleshooting steps:" >&2
+    echo "1. Verify Dropbear public key is in Proxmox /root/.ssh/authorized_keys (or ~${HOST_SSH_USER}/.ssh/authorized_keys):" >&2
+    echo "   Run on OpenWrt: dropbearkey -y -f $SSH_KEY_PATH" >&2
+    echo "2. Check Proxmox firewall/port: nc -z -w 3 $HOST_IP $HOST_SSH_PORT" >&2
+    echo "3. Test manual SSH with verbose flag: ssh -v -p $HOST_SSH_PORT -i $SSH_KEY_PATH ${HOST_SSH_USER}@$HOST_IP" >&2
     exit 1
 fi
 echo "Passwordless SSH trust verified."
 
 # Test if wrapper is active by running unauthorized command
-SSH_BLOCK_TEST=$(ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "uname" 2>&1)
+SSH_BLOCK_TEST=$($SSH_CMD "uname" 2>&1)
 if echo "$SSH_BLOCK_TEST" | grep -iq "Access Denied"; then
     echo "SSH Command Wrapper detected and active on Proxmox."
     WRAPPER_ACTIVE=1
@@ -85,8 +95,8 @@ echo "" >> "$TEMP_CONF"
 # Filter and extract variables from /etc/homelab_power.conf
 # This strictly keeps only PVE-relevant parameters and avoids leaking secrets
 for var in CPU_THRESHOLD SCALE_CPU_THRESHOLD_BY_CORES NET_INTERFACE NET_THRESHOLD_KBPS MONITORED_PORTS \
-           LXC_SUSPEND_METHOD VM_SUSPEND_METHOD PROTECTED_PROCESSES \
-           GUEST_ORCHESTRATION_MAP ACTIVE_TIME_WINDOWS GUEST_NAME_MAP GUEST_PORT_MAP \
+           HOST_SSH_PORT LXC_SUSPEND_METHOD VM_SUSPEND_METHOD PROTECTED_PROCESSES \
+           GUEST_ORCHESTRATION_MAP EXEMPT_SHUTDOWN_GUESTS ACTIVE_TIME_WINDOWS GUEST_NAME_MAP GUEST_PORT_MAP \
            LOG_FILE ENABLE_SYSLOG \
            MONITOR_CPU_THRESHOLD_PCT MONITOR_RAM_THRESHOLD_PCT MONITOR_DISK_THRESHOLD_PCT \
            MONITOR_DISK_PATHS MONITOR_SERVICES MONITOR_ZFS_POOLS MONITOR_CRITICAL_GUESTS \
@@ -107,16 +117,17 @@ echo "Sanitized configuration generated at $TEMP_CONF."
 echo "Deploying configuration to Proxmox..."
 if [ "$WRAPPER_ACTIVE" -eq 1 ]; then
     # Push via cat redirect permitted by wrapper
-    ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "cat > /etc/homelab_power.conf" < "$TEMP_CONF"
+    $SSH_CMD "cat > /etc/homelab_power.conf" < "$TEMP_CONF"
 else
     # Fallback to standard scp if wrapper is not configured yet
-    scp -i "$SSH_KEY_PATH" $SSH_OPTS "$TEMP_CONF" root@$HOST_IP:/etc/homelab_power.conf >/dev/null
+    scp -P "$HOST_SSH_PORT" -i "$SSH_KEY_PATH" "$TEMP_CONF" ${HOST_SSH_USER}@$HOST_IP:/etc/homelab_power.conf >/dev/null
 fi
 
 if [ $? -eq 0 ]; then
     echo "Configuration successfully synchronized to Proxmox /etc/homelab_power.conf."
-    # Trigger systemd reload/restart on PVE if timer is active
-    ssh -i "$SSH_KEY_PATH" $SSH_OPTS -y -K 3 root@$HOST_IP "systemctl restart proxmox_idle_monitor.timer" >/dev/null 2>&1 || true
+    # Trigger systemd reload/restart on PVE if timers are active
+    $SSH_CMD "systemctl restart proxmox_idle_monitor.timer" >/dev/null 2>&1 || true
+    $SSH_CMD "systemctl restart proxmox_resource_monitor.timer" >/dev/null 2>&1 || true
 else
     echo "Error: Failed to write configuration to Proxmox." >&2
     exit 1

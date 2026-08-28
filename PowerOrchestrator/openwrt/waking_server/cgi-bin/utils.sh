@@ -148,7 +148,14 @@ url_decode() {
 
 # Helper to escape values for safe JSON transmission
 escape_json() {
-    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    printf '%s' "$1" | awk 'BEGIN {ORS="";} {
+        gsub(/\\/, "\\\\");
+        gsub(/"/, "\\\"");
+        gsub(/\r/, "");
+        gsub(/\t/, "\\t");
+        if (NR > 1) printf "\\n";
+        printf "%s", $0;
+    }'
 }
 
 # --- Common Request Parsing & Security Helpers ---

@@ -31,8 +31,10 @@ fi
 . "$(dirname "$0")/utils.sh"
 
 # Global SSH Settings for Proxmox Host Communication
-SSH_KEY_PATH="/etc/dropbear/id_dropbear"
-SSH_CMD="ssh -i $SSH_KEY_PATH -y -K 3 root@$HOST_IP"
+SSH_KEY_PATH="${SSH_KEY_PATH:-/etc/dropbear/id_dropbear}"
+HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
+HOST_SSH_USER="${HOST_SSH_USER:-root}"
+SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 
 # Extract client IP using helper
 CLIENT_IP=$(get_client_ip)
@@ -164,16 +166,19 @@ if [ "$PORTAL_LOCKED" -eq 1 ]; then
 fi
 
 # --- General Host check helper ---
-# --- General Host check helper ---
 is_host_online() {
     if ping -c 1 -W 1 "$HOST_IP" >/dev/null 2>&1; then
         return 0
     fi
-    for p in 8006 80 8123 22; do
-        if nc -w 1 -z "$HOST_IP" "$p" >/dev/null 2>&1; then
+    if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl -k -s --connect-timeout 1 "https://${HOST_IP}:8006" >/dev/null 2>&1 || \
+           curl -s --connect-timeout 1 "http://${HOST_IP}:80" >/dev/null 2>&1; then
             return 0
         fi
-    done
+    fi
     return 1
 }
 
@@ -250,18 +255,29 @@ if [ -z "$VMID" ]; then
     echo "  \"is_private\": ${USER_IS_ACTUALLY_PRIVATE},"
     echo "  \"maintenance_system\": \"${SYS_MAINT_ESCAPED}\","
     if [ "$HOST_STATUS" = "online" ] && [ -n "$cpu" ]; then
-        echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\", \"cpu\": ${cpu}, \"ram_used\": ${ram_used}, \"ram_total\": ${ram_total}, \"temp\": ${temp}, \"disk\": ${disk}},"
+        echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\", \"cpu\": ${cpu:-0}, \"ram_used\": ${ram_used:-0}, \"ram_total\": ${ram_total:-0}, \"temp\": ${temp:-0}, \"disk\": ${disk:-0}},"
     else
         echo "  \"host\": {\"status\": \"${HOST_STATUS}\", \"ip\": \"${HOST_IP}\"},"
     fi
     echo "  \"guests\": ["
     
+    # Gather unique list of all configured VMIDs across all map variables
+    ALL_VMIDS=$(
+        {
+            [ -n "$GUEST_ORCHESTRATION_MAP" ] && echo "$GUEST_ORCHESTRATION_MAP" | tr ',' '\n' | cut -d':' -f1
+            [ -n "$GUEST_NAME_MAP" ] && echo "$GUEST_NAME_MAP" | tr ',' '\n' | cut -d':' -f1
+            [ -n "$GUEST_MESSAGE_MAP" ] && echo "$GUEST_MESSAGE_MAP" | tr ',' '\n' | cut -d':' -f1
+            [ -n "$GUEST_PORT_MAP" ] && echo "$GUEST_PORT_MAP" | tr ',' '\n' | cut -d':' -f1
+            [ -n "$GUEST_PASSCODE_MAP" ] && echo "$GUEST_PASSCODE_MAP" | tr ',' '\n' | cut -d':' -f1
+            [ -n "$GUEST_PRIVACY_MAP" ] && echo "$GUEST_PRIVACY_MAP" | tr ',' '\n' | cut -d':' -f1
+        } | grep -E '^[0-9]+$' | sort -u
+    )
+    
     # Pre-ping all guests in parallel to avoid sequential delay bottleneck
     # FIX RACE CONDITION: Use unique process ID $$ in filename
     if [ "$HOST_STATUS" = "online" ]; then
-        for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
-            g_vmid=$(echo "$entry" | cut -d':' -f1)
-            g_ip=$(echo "$entry" | cut -d':' -f2)
+        for g_vmid in $ALL_VMIDS; do
+            g_ip=$(echo "$GUEST_ORCHESTRATION_MAP" | grep -oE "${g_vmid}:[^:]+" | cut -d':' -f2 2>/dev/null)
             if [ -n "$g_ip" ]; then
                 (
                     if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
@@ -275,11 +291,10 @@ if [ -z "$VMID" ]; then
         wait
     fi
     
-    # Loop through configured guest map
+    # Loop through configured guest list
     first=1
-    for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
-        g_vmid=$(echo "$entry" | cut -d':' -f1)
-        g_ip=$(echo "$entry" | cut -d':' -f2)
+    for g_vmid in $ALL_VMIDS; do
+        g_ip=$(echo "$GUEST_ORCHESTRATION_MAP" | grep -oE "${g_vmid}:[^:]+" | cut -d':' -f2 2>/dev/null)
         
         # Privacy filter
         g_privacy=$(echo "$GUEST_PRIVACY_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
@@ -291,6 +306,13 @@ if [ -z "$VMID" ]; then
         fi
         
         g_name=$(echo "$GUEST_NAME_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2 2>/dev/null)
+        if [ -z "$g_name" ]; then
+            # Fallback: extract title from first segment of message map before <br>
+            g_raw_msg=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${g_vmid}:[^,]+" | cut -d':' -f2- 2>/dev/null)
+            if [ -n "$g_raw_msg" ]; then
+                g_name=$(echo "$g_raw_msg" | awk -F'<br>' '{print $1}')
+            fi
+        fi
         [ -z "$g_name" ] && g_name="Guest ${g_vmid}"
         g_name_escaped=$(escape_json "$g_name")
         
@@ -303,7 +325,7 @@ if [ -z "$VMID" ]; then
             if [ -f "$ping_file" ]; then
                 g_online=$(cat "$ping_file")
                 rm -f "$ping_file"
-            else
+            elif [ -n "$g_ip" ]; then
                 if ping -c 1 -W 1 "$g_ip" >/dev/null 2>&1; then
                     g_online=1
                 fi
@@ -365,10 +387,13 @@ if [ -z "$VMID" ]; then
     exit 0
 fi
 
-# =============================================================================
-# SINGLE GUEST WAKING MODE
-# =============================================================================
 GUEST_NAME=$(echo "$GUEST_NAME_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2 2>/dev/null)
+if [ -z "$GUEST_NAME" ]; then
+    g_raw_msg=$(echo "$GUEST_MESSAGE_MAP" | grep -oE "${VMID}:[^,]+" | cut -d':' -f2- 2>/dev/null)
+    if [ -n "$g_raw_msg" ]; then
+        GUEST_NAME=$(echo "$g_raw_msg" | awk -F'<br>' '{print $1}')
+    fi
+fi
 [ -z "$GUEST_NAME" ] && GUEST_NAME="Guest $VMID"
 GUEST_NAME_ESCAPED=$(escape_json "$GUEST_NAME")
 
