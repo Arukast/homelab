@@ -75,7 +75,7 @@ day_to_num() {
 is_in_active_window() {
     [ -z "$ACTIVE_TIME_WINDOWS" ] && return 1
     
-    local curr_day=$(date +%a)
+    local curr_day=$(LC_ALL=C date +%a)
     local curr_day_num=$(day_to_num "$curr_day")
     local curr_hour=$(date +%H)
     local curr_min=$(date +%M)

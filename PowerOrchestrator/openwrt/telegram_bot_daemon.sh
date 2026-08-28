@@ -349,7 +349,7 @@ ${vms}"
                 flag && NR>2 && $1 != "VMID" && $1 != "" {
                     vmid = $1; name = $2; status = $3;
                     btn_text = (status == "running" ? "Stop " name : "Start " name);
-                    cmd = (status == "running" ? "/ctstop " vmid : "/ctstart " vmid);
+                    cmd = (status == "running" ? "/vmstop " vmid : "/vmstart " vmid);
                     printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
                 }
             ' | paste -sd, -)
@@ -374,7 +374,7 @@ ${vms}"
             
         /ctstart)
             if [ -z "$arg1" ]; then
-                send_message "$chat_id" "$MSG_BOT_CT_START_USAGE"
+                send_message "$chat_id" "[Usage] /ctstart <vmid>"
                 return
             fi
             
@@ -411,26 +411,20 @@ ${vms}"
                         return
                     fi
                     
-                    send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot guest..."
+                    send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot LXC container..."
                 fi
                 
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
-                # Detect if VM or LXC and start
-                local start_out
-                local node_type="LXC"
-                if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
-                    start_out=$($SSH_CMD "pct start $arg1" 2>&1)
-                elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
-                    node_type="VM"
-                    start_out=$($SSH_CMD "qm start $arg1" 2>&1)
-                else
-                    send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_NOT_FOUND")"
+                # Check LXC status directly
+                if ! $SSH_CMD "pct status $arg1" >/dev/null 2>&1; then
+                    send_message "$chat_id" "[Error] LXC container ID $arg1 not found on Proxmox. (If this is a VM, use /vmstart $arg1)"
                     return
                 fi
                 
+                local start_out=$($SSH_CMD "pct start $arg1" 2>&1)
                 local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
                 if [ -n "$clean_out" ] && echo "$clean_out" | grep -iqE "error|does not exist|failed|invalid"; then
-                    send_message "$chat_id" "[Error] Failed to start $node_type ID $arg1:
+                    send_message "$chat_id" "[Error] Failed to start LXC ID $arg1:
 \`\`\`
 ${clean_out}
 \`\`\`"
@@ -460,21 +454,15 @@ ${clean_out:-Started successfully}
             fi
             
             send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_STOPPING")"
-            local stop_out
-            local node_type="LXC"
-            if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
-                stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
-            elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
-                node_type="VM"
-                stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
-            else
-                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_STOP_NOT_FOUND")"
+            if ! $SSH_CMD "pct status $arg1" >/dev/null 2>&1; then
+                send_message "$chat_id" "[Error] LXC container ID $arg1 not found on Proxmox. (If this is a VM, use /vmstop $arg1)"
                 return
             fi
             
+            local stop_out=$($SSH_CMD "pct stop $arg1" 2>&1)
             local clean_stop=$(echo "$stop_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             if [ -n "$clean_stop" ] && echo "$clean_stop" | grep -iqE "error|does not exist|failed|invalid"; then
-                send_message "$chat_id" "[Error] Failed to stop $node_type ID $arg1:
+                send_message "$chat_id" "[Error] Failed to stop LXC ID $arg1:
 \`\`\`
 ${clean_stop}
 \`\`\`"
@@ -503,21 +491,15 @@ ${clean_stop:-Stop signal dispatched}
             fi
             
             send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_RESTARTING")"
-            local res_out
-            local node_type="LXC"
-            if $SSH_CMD "pct config $arg1" >/dev/null 2>&1; then
-                res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
-            elif $SSH_CMD "qm config $arg1" >/dev/null 2>&1; then
-                node_type="VM"
-                res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
-            else
-                send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_NOT_FOUND")"
+            if ! $SSH_CMD "pct status $arg1" >/dev/null 2>&1; then
+                send_message "$chat_id" "[Error] LXC container ID $arg1 not found on Proxmox. (If this is a VM, use /vmrestart $arg1)"
                 return
             fi
             
+            local res_out=$($SSH_CMD "pct reboot $arg1" 2>&1)
             local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             if [ -n "$clean_res" ] && echo "$clean_res" | grep -iqE "error|does not exist|failed|invalid"; then
-                send_message "$chat_id" "[Error] Failed to restart $node_type ID $arg1:
+                send_message "$chat_id" "[Error] Failed to restart LXC ID $arg1:
 \`\`\`
 ${clean_res}
 \`\`\`"
@@ -525,6 +507,144 @@ ${clean_res}
                 send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
 \`\`\`
 ${clean_res:-Restart signal dispatched}
+\`\`\`"
+            fi
+            ;;
+
+        /vmstart)
+            if [ -z "$arg1" ]; then
+                send_message "$chat_id" "[Usage] /vmstart <vmid>"
+                return
+            fi
+            
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "Error: VMID must be numeric."
+                return
+            fi
+            
+            # We run the entire waking & starting sequence in the background to prevent daemon blocking
+            (
+                # Check if host is offline, if so wake it first
+                if ! is_host_alive; then
+                    send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
+                    etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
+                    
+                    # Wait for host to come online and respond to SSH
+                    send_message "$chat_id" "Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."
+                    
+                    local success=0
+                    local attempt=1
+                    while [ $attempt -le 25 ]; do
+                        if is_host_alive; then
+                            if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+                                success=1
+                                break
+                            fi
+                        fi
+                        sleep 3
+                        attempt=$((attempt + 1))
+                    done
+                    
+                    if [ $success -eq 0 ]; then
+                        send_message "$chat_id" "Timeout: Proxmox host did not respond to SSH in time. Please check physical status."
+                        return
+                    fi
+                    
+                    send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot Virtual Machine..."
+                fi
+                
+                send_message "$chat_id" "[Start] Starting Virtual Machine $arg1..."
+                if ! $SSH_CMD "qm status $arg1" >/dev/null 2>&1; then
+                    send_message "$chat_id" "[Error] Virtual Machine ID $arg1 not found on Proxmox. (If this is an LXC, use /ctstart $arg1)"
+                    return
+                fi
+                
+                local start_out=$($SSH_CMD "qm start $arg1" 2>&1)
+                local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                if [ -n "$clean_out" ] && echo "$clean_out" | grep -iqE "error|does not exist|failed|invalid"; then
+                    send_message "$chat_id" "[Error] Failed to start VM ID $arg1:
+\`\`\`
+${clean_out}
+\`\`\`"
+                else
+                    send_message "$chat_id" "[Success] VM $arg1 start response:
+\`\`\`
+${clean_out:-Started successfully}
+\`\`\`"
+                fi
+            ) >/dev/null 2>&1 </dev/null &
+            ;;
+
+        /vmstop)
+            if [ -z "$arg1" ]; then
+                send_message "$chat_id" "[Usage] /vmstop <vmid>"
+                return
+            fi
+            
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "Error: VMID must be numeric."
+                return
+            fi
+            
+            if ! is_host_alive; then
+                send_message "$chat_id" "$MSG_BOT_CT_STOP_HOST_OFFLINE"
+                return
+            fi
+            
+            send_message "$chat_id" "[Stop] Sending ACPI shutdown signal to Virtual Machine $arg1..."
+            if ! $SSH_CMD "qm status $arg1" >/dev/null 2>&1; then
+                send_message "$chat_id" "[Error] Virtual Machine ID $arg1 not found on Proxmox. (If this is an LXC, use /ctstop $arg1)"
+                return
+            fi
+            
+            local stop_out=$($SSH_CMD "qm shutdown $arg1" 2>&1)
+            local clean_stop=$(echo "$stop_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            if [ -n "$clean_stop" ] && echo "$clean_stop" | grep -iqE "error|does not exist|failed|invalid"; then
+                send_message "$chat_id" "[Error] Failed to stop VM ID $arg1:
+\`\`\`
+${clean_stop}
+\`\`\`"
+            else
+                send_message "$chat_id" "[Success] VM $arg1 stop response:
+\`\`\`
+${clean_stop:-Shutdown signal dispatched}
+\`\`\`"
+            fi
+            ;;
+
+        /vmrestart)
+            if [ -z "$arg1" ]; then
+                send_message "$chat_id" "[Usage] /vmrestart <vmid>"
+                return
+            fi
+            
+            if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+                send_message "$chat_id" "Error: VMID must be numeric."
+                return
+            fi
+            
+            if ! is_host_alive; then
+                send_message "$chat_id" "$MSG_BOT_CT_RESTART_HOST_OFFLINE"
+                return
+            fi
+            
+            send_message "$chat_id" "[Restart] Sending reboot signal to Virtual Machine $arg1..."
+            if ! $SSH_CMD "qm status $arg1" >/dev/null 2>&1; then
+                send_message "$chat_id" "[Error] Virtual Machine ID $arg1 not found on Proxmox. (If this is an LXC, use /ctrestart $arg1)"
+                return
+            fi
+            
+            local res_out=$($SSH_CMD "qm reboot $arg1" 2>&1)
+            local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            if [ -n "$clean_res" ] && echo "$clean_res" | grep -iqE "error|does not exist|failed|invalid"; then
+                send_message "$chat_id" "[Error] Failed to restart VM ID $arg1:
+\`\`\`
+${clean_res}
+\`\`\`"
+            else
+                send_message "$chat_id" "[Success] VM $arg1 restart response:
+\`\`\`
+${clean_res:-Reboot signal dispatched}
 \`\`\`"
             fi
             ;;
