@@ -575,9 +575,11 @@ ${clean_res:-Restart signal dispatched}
 ${clean_out:-Command failed with exit code $ret}
 \`\`\`"
                 else
+                    # Filter benign PCI reset and TPM state warnings on successful start
+                    local display_out=$(echo "$clean_out" | grep -vE "failed to reset PCI device|error writing '1' to '/sys/bus/pci/devices/.*reset'|swtpm_setup:" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
                     send_message "$chat_id" "[Success] VM $arg1 start response:
 \`\`\`
-${clean_out:-Started successfully}
+${display_out:-Started successfully}
 \`\`\`"
                 fi
             ) >/dev/null 2>&1 </dev/null &
