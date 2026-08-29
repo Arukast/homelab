@@ -396,9 +396,12 @@ Once active, search for your bot in Telegram and start interacting.
   * `/hostrebootforce` - Immediately stop/suspend guest nodes and reboot the host.
 * **Guest Node Control**:
   * `/list` - List all LXC containers and QEMU VMs with their status (running/stopped).
-  * `/ctstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM or container.
-  * `/ctstop <vmid>` - Performs a clean shutdown/stop of the specific VM or container.
-  * `/ctrestart <vmid>` - Restarts the specific VM or container.
+  * `/ctstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific container.
+  * `/ctstop <vmid>` - Performs a clean shutdown/stop of the specific container.
+  * `/ctrestart <vmid>` - Restarts the specific container.
+  * `/vmstart <vmid>` - Wakes the Proxmox host if sleeping and starts the specific VM.
+  * `/vmstop <vmid>` - Performs a clean shutdown/stop of the specific VM.
+  * `/vmrestart <vmid>` - Restarts the specific VM.
 * **Maintenance Control**:
   * `/maintenance` (or `/maintenance status`) - Check current system and service maintenance status.
   * `/maintenance system <reason>` - Put the system in maintenance mode and show `<reason>` banner on dashboard.
@@ -419,19 +422,22 @@ To enable the auto-completion menu for commands in Telegram:
 2. Send `/setcommands` and choose your Homelab Bot.
 3. Paste the following block exactly:
    ```text
-   status - Check host power and PVE resource status
-   wake - Wake the Proxmox host (Wake-on-LAN)
-   sleep - Safe sleep (respects idle rules)
-   sleepforce - Force host to sleep immediately
-   hostshutdown - Safe graceful shutdown
-   hostshutdownforce - Force shutdown immediately
-   hostreboot - Safe reboot
-   hostrebootforce - Force reboot immediately
-   list - List all LXC containers and VMs
-   ctstart - Start a specific VM/container (e.g. /ctstart 101)
-   ctstop - Stop a specific VM/container (e.g. /ctstop 101)
-   ctrestart - Restart a specific VM/container (e.g. /ctrestart 101)
-   maintenance - Check and control system or service maintenance
+   status - Check host power, PVE resource status, and guest counts
+   wake - Forcefully wake the Proxmox host using Wake-on-LAN
+   sleep - Safely suspend guest nodes and sleep host (checks idle)
+   sleepforce - Immediately suspend guest nodes and sleep host
+   hostshutdown - Safely shutdown the Proxmox host completely
+   hostshutdownforce - Force shutdown host and stop/suspend guests
+   hostreboot - Safely reboot the Proxmox host
+   hostrebootforce - Force reboot host and stop/suspend guests
+   list - List all LXC containers and QEMU VMs with status
+   ctstart - Wake host and start a container (/ctstart <vmid>)
+   ctstop - Clean shutdown of a container (/ctstop <vmid>)
+   ctrestart - Restart a container (/ctrestart <vmid>)
+   vmstart - Wake host and start a VM (/vmstart <vmid>)
+   vmstop - Clean shutdown of a VM (/vmstop <vmid>)
+   vmrestart - Restart a VM (/vmrestart <vmid>)
+   maintenance - Check or toggle system/service maintenance modes
    ```
 
 ---
