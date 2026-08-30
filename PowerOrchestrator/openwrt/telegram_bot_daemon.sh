@@ -102,6 +102,47 @@ send_message() {
     fi
 }
 
+edit_message_text() {
+    local chat_id="$1"
+    local message_id="$2"
+    local text="$3"
+    local markup="$4"
+    local resp=""
+
+    if [ -z "$message_id" ]; then
+        send_message "$chat_id" "$text" "$markup"
+        return
+    fi
+
+    if [ -n "$markup" ]; then
+        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "message_id=${message_id}" \
+            --data-urlencode "text=${text}" \
+            --data-urlencode "parse_mode=Markdown" \
+            --data-urlencode "reply_markup=${markup}")
+        if ! echo "$resp" | grep -q '"ok":true'; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "message_id=${message_id}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "reply_markup=${markup}" >/dev/null
+        fi
+    else
+        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+            --data-urlencode "chat_id=${chat_id}" \
+            --data-urlencode "message_id=${message_id}" \
+            --data-urlencode "text=${text}" \
+            --data-urlencode "parse_mode=Markdown")
+        if ! echo "$resp" | grep -q '"ok":true'; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageText" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "message_id=${message_id}" \
+                --data-urlencode "text=${text}" >/dev/null
+        fi
+    fi
+}
+
 # Main Command Processor
 process_command() {
     local cmd="$1"
@@ -116,8 +157,8 @@ process_command() {
     case "$action" in
         /start|/help)
             local markup='{"inline_keyboard":[
-                [{"text":"Status","callback_data":"/status"},{"text":"List VMs","callback_data":"/list"}],
-                [{"text":"Wake Host","callback_data":"/wake"},{"text":"Sleep (Safe)","callback_data":"/sleep"}]
+                [{"text":"📊 Status","callback_data":"action:status"},{"text":"📋 List Nodes","callback_data":"action:list_nodes"}],
+                [{"text":"⚡ Host Power","callback_data":"action:host_power_menu"},{"text":"🛠️ Maintenance","callback_data":"action:maintenance_menu"}]
             ]}'
             send_message "$chat_id" "$MSG_BOT_HELP" "$markup"
             ;;
@@ -765,13 +806,15 @@ while true; do
         USER_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.from.id")
         CHAT_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.chat.id")
         CMD_TEXT=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.text")
+        MESSAGE_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].message.message_id")
         CALLBACK_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.id")
-        
+
         # Fall back to callback query values if present
         if [ -n "$CALLBACK_ID" ]; then
             USER_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.from.id")
             CHAT_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.message.chat.id")
             CMD_TEXT=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.data")
+            MESSAGE_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.message.message_id")
         fi
         
         # Advance offset to acknowledge this update safely (preventing empty string shell errors)
