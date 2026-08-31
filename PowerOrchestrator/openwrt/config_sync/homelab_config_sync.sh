@@ -6,11 +6,11 @@
 
 # Load Helper
 . "$(dirname "$0")/../components/helper_conf.sh"
-. "$(dirname "$0")/../components/helper_permission.sh"
-. "$(dirname "$0")/../components/helper_verify.sh"
-. "$(dirname "$0")/../components/helper_routerIP.sh"
-. "$(dirname "$0")/../components/helper_sanitizedConf.sh"
-. "$(dirname "$0")/../components/helper_deploy.sh"
+. "$(dirname "$0")/components/helper_permission.sh"
+. "$(dirname "$0")/components/helper_verify.sh"
+. "$(dirname "$0")/components/helper_routerIP.sh"
+. "$(dirname "$0")/components/helper_sanitizedConf.sh"
+. "$(dirname "$0")/components/helper_deploy.sh"
 
 
 # Read Config
