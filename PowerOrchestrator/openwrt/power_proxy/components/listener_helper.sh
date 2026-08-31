@@ -79,3 +79,25 @@ stop_guest_listeners() {
         done
     fi
 }
+
+listen_game() {
+    if [ "$PROTO" = "udp" ]; then
+        echo "Starting UDP listener on port $PORT_NUM..."
+        nc -u -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1 &
+    else
+        echo "Starting TCP listener on port $PORT_NUM..."
+        nc -l -p "$PORT_NUM" -w 2 >/dev/null 2>&1 &
+    fi
+    NC_PID=$!
+}
+
+listen_guest() {
+    if [ "$PROTO" = "udp" ]; then
+        echo "Listening on UDP ${GUEST_IP}:${PORT_NUM}..."
+        nc -u -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1 &
+    else
+        echo "Listening on TCP ${GUEST_IP}:${PORT_NUM}..."
+        nc -l -p "$PORT_NUM" -s "$GUEST_IP" -w 2 >/dev/null 2>&1 &
+    fi
+    NC_PID=$!
+}

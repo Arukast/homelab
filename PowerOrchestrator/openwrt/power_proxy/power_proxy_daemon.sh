@@ -9,8 +9,9 @@ SHARED_COMP="/usr/bin/components"
 # Load power_proxy components from /usr/bin/power_proxy_components
 PP_COMP="/usr/bin/power_proxy_components"
 
-. "$SHARED_COMP"/helper_conf.sh
-. "$SHARED_COMP"/helper_check.sh
+# Load Helper
+. "$SHARED_COMP"/conf_helper.sh
+. "$SHARED_COMP"/check_helper.sh
 . "$PP_COMP"/notify_helper.sh
 . "$PP_COMP"/static_arp_helper.sh
 . "$PP_COMP"/redirects_helper.sh
@@ -35,7 +36,7 @@ HOST_SSH_USER="${HOST_SSH_USER:-root}"
 SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 IFACE="${LAN_INTERFACE:-br-lan}"
 
-trap cleanup SIGTERM SIGINT
+trap cleanup_main SIGTERM SIGINT
 
 # Initialize ARP binding
 apply_static_arp
