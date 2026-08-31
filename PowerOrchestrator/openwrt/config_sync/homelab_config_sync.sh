@@ -4,13 +4,18 @@
 # File: /usr/bin/homelab_config_sync.sh
 # =============================================================================
 
+# Load shared components from /usr/bin/components
+SHARED_COMP="/usr/bin/components"
+# Load power_proxy components from /usr/bin/homelab_config_sync.sh
+SYNC_COMP="/usr/bin/homelab_config_sync.sh"
+
 # Load Helper
-. "$(dirname "$0")"/../components/helper_conf.sh
-. "$(dirname "$0")"/components/helper_permission.sh
-. "$(dirname "$0")"/components/helper_verify.sh
-. "$(dirname "$0")"/components/helper_routerIP.sh
-. "$(dirname "$0")"/components/helper_sanitizedConf.sh
-. "$(dirname "$0")"/components/helper_deploy.sh
+. "$SHARED_COMP"/conf_helper.sh
+. "$SYNC_COMP"/permission_helper.sh
+. "$SYNC_COMP"/verify_helper.sh
+. "$SYNC_COMP"/router_ip_helper.sh
+. "$SYNC_COMP"/sanitized_conf_helper.sh
+. "$SYNC_COMP"/deploy_helper.sh
 
 
 # Read Config

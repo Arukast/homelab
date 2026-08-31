@@ -11,11 +11,11 @@ PP_COMP="/usr/bin/power_proxy_components"
 
 . "$SHARED_COMP"/helper_conf.sh
 . "$SHARED_COMP"/helper_check.sh
-. "$PP_COMP"/helper_notify.sh
-. "$PP_COMP"/helper_staticArp.sh
-. "$PP_COMP"/helper_redirects.sh
-. "$PP_COMP"/helper_listeners.sh
-. "$PP_COMP"/helper_cleanup.sh
+. "$PP_COMP"/notify_helper.sh
+. "$PP_COMP"/static_arp_helper.sh
+. "$PP_COMP"/redirects_helper.sh
+. "$PP_COMP"/listener_helper.sh
+. "$PP_COMP"/cleanup_helper.sh
 . "$PP_COMP"/main.sh
 
 # Read Config

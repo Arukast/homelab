@@ -9,11 +9,13 @@ SHARED_COMP="/usr/bin/components"
 # Load power_proxy components from /usr/bin/telegram_components
 TB_COMP="/usr/bin/telegram_components"
 
-. "$SHARED_COMP"/helper_conf.sh
-. "$SHARED_COMP"/helper_check.sh
-. "$TB_COMP"/helper_messages.sh
-. "$TB_COMP"/helper_polling.sh
-. "$TB_COMP"/helper_processCommand.sh
+# Load Helper
+. "$SHARED_COMP"/conf_helper.sh
+. "$SHARED_COMP"/check_helper.sh
+. "$TB_COMP"/message_helper.sh
+. "$TB_COMP"/polling_helper.sh
+. "$TB_COMP"/process_command_helper.sh
+
 
 # Read Config
 read_conf "/etc/homelab_power.conf"
