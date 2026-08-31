@@ -1,11 +1,12 @@
 #!/bin/sh
 
 is_pid_running() {
-    PIDFILE="/var/run/power_proxy_daemon.pid"
+    local PIDFILE=$1
+    local MSG=$2
     if [ -f "$PIDFILE" ]; then
         PID=$(cat "$PIDFILE" 2>/dev/null)
         if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-            echo "ERROR: power_proxy_daemon.sh is already running with PID $PID." >&2
+            echo "ERROR: $MSG is already running with PID $PID." >&2
             exit 1
         fi
     fi
@@ -27,4 +28,12 @@ is_host_alive() {
         fi
     fi
     return 1
+}
+
+# Check token
+is_telegram_bot_token() {
+    if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
+        echo "ERROR: BOT_TOKEN is not configured in $CONF" >&2
+        exit 1
+    fi
 }

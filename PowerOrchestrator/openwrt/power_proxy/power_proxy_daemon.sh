@@ -10,7 +10,7 @@ SHARED_COMP="/usr/bin/components"
 PP_COMP="/usr/bin/power_proxy_components"
 
 . "$SHARED_COMP"/helper_conf.sh
-. "$PP_COMP"/helper_check.sh
+. "$SHARED_COMP"/helper_check.sh
 . "$PP_COMP"/helper_notify.sh
 . "$PP_COMP"/helper_staticArp.sh
 . "$PP_COMP"/helper_redirects.sh
@@ -23,7 +23,7 @@ read_conf "/etc/homelab_power.conf"
 check_ip "/etc/homelab_power.conf"
 read_optional_conf "/etc/homelab_messages.conf"
 
-is_pid_running
+is_pid_running "/var/run/power_proxy_daemon.pid" "power_proxy_daemon.sh"
 
 # State variables
 CURRENT_STATE="UNKNOWN"

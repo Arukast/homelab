@@ -1,0 +1,68 @@
+#!/bin/bash
+
+ctstart_command() {
+    if [ -z "$arg1" ]; then
+        send_message "$chat_id" "[Usage] /ctstart <vmid>"
+        return
+    fi
+
+    if ! echo "$arg1" | grep -qE "^[0-9]+$"; then
+        send_message "$chat_id" "Error: VMID must be numeric."
+        return
+    fi
+
+    # We run the entire waking & starting sequence in the background to prevent daemon blocking
+    (
+        # Check if host is offline, if so wake it first
+        if ! is_host_alive; then
+            send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
+            etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
+
+            # Wait for host to come online and respond to SSH
+            send_message "$chat_id" "Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."
+
+            local success=0
+            local attempt=1
+            while [ $attempt -le 25 ]; do
+                if is_host_alive; then
+                    if $SSH_CMD "echo OK" >/dev/null 2>&1; then
+                        success=1
+                        break
+                    fi
+                fi
+                sleep 3
+                attempt=$((attempt + 1))
+            done
+
+            if [ $success -eq 0 ]; then
+                send_message "$chat_id" "Timeout: Proxmox host did not respond to SSH in time. Please check physical status."
+                return
+            fi
+
+            send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot LXC container..."
+        fi
+
+        send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
+        # Check LXC status directly
+        if ! $SSH_CMD "pct status $arg1" >/dev/null 2>&1; then
+            send_message "$chat_id" "[Error] LXC container ID $arg1 not found on Proxmox. (If this is a VM, use /vmstart $arg1)"
+            return
+        fi
+
+        local start_out
+        start_out=$($SSH_CMD "pct start $arg1" 2>&1)
+        local ret=$?
+        local clean_out=$(echo "$start_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        if [ $ret -ne 0 ]; then
+            send_message "$chat_id" "[Error] Failed to start LXC ID $arg1:
+\`\`\`
+${clean_out:-Command failed with exit code $ret}
+\`\`\`"
+        else
+            send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_SUCCESS")
+\`\`\`
+${clean_out:-Started successfully}
+\`\`\`"
+        fi
+    ) >/dev/null 2>&1 </dev/null &
+}
