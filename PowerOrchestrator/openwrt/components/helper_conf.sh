@@ -10,3 +10,10 @@ read_conf() {
     # Load config
     . "$CONF"
 }
+
+check_ip() {
+    if [ -z "$HOST_IP" ]; then
+        echo "ERROR: HOST_IP is not configured in $CONF" >&2
+        exit 1
+    fi
+}
