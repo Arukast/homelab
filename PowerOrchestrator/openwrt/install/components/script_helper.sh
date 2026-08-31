@@ -9,12 +9,16 @@ install_scripts() {
     # Deploy power_proxy components
     mkdir -p /usr/bin/power_proxy_components
     cp power_proxy/components/* /usr/bin/power_proxy_components/
+    # Deploy telegram components
+    mkdir -p /usr/bin/telegram_components/commands
+    cp telegram/components/*.sh /usr/bin/telegram_components/
+    cp telegram/components/commands/*.sh /usr/bin/telegram_components/commands/
 
-    cp wake_listener/game_wake_listener.sh /usr/bin/game_wake_listener.sh
-    cp wake_listener/guest_wake_listener.sh /usr/bin/guest_wake_listener.sh
-    cp homelab_notify.sh /usr/bin/homelab_notify.sh
+    cp power_proxy/game_wake_listener.sh /usr/bin/game_wake_listener.sh
+    cp power_proxy/guest_wake_listener.sh /usr/bin/guest_wake_listener.sh
+    cp telegram/notify_homelab.sh /usr/bin/homelab_notify.sh
     cp config_sync/homelab_config_sync.sh /usr/bin/homelab_config_sync.sh
-    cp homelab_maintenance.sh /usr/bin/homelab_maintenance
+    cp telegram/maintenance_homelab.sh /usr/bin/homelab_maintenance
 
     chmod +x /usr/bin/telegram_bot_daemon.sh
     chmod +x /usr/bin/power_proxy_daemon.sh

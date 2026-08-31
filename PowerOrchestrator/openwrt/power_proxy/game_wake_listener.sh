@@ -17,12 +17,12 @@ PP_COMP="/usr/bin/power_proxy_components"
 . "$PP_COMP"/listener_helper.sh
 
 # Read Config
+CONF="/etc/homelab_power.conf"
+MSG_CONF="/etc/homelab_messages.conf"
 read_conf "$CONF"
 read_optional_conf "$MSG_CONF"
 
 PORT_RAW="$1"
-CONF="/etc/homelab_power.conf"
-MSG_CONF="/etc/homelab_messages.conf"
 
 check_port
 

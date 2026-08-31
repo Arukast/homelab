@@ -18,14 +18,14 @@ PP_COMP="/usr/bin/power_proxy_components"
 . "$PP_COMP"/listener_helper.sh
 
 # Read Config
+CONF="/etc/homelab_power.conf"
+MSG_CONF="/etc/homelab_messages.conf"
 read_conf $CONF
 read_optional_conf $MSG_CONF
 
 GUEST_IP="$1"
 PORT_RAW="$2"
 VMID="$3"
-CONF="/etc/homelab_power.conf"
-MSG_CONF="/etc/homelab_messages.conf"
 HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
 HOST_SSH_USER="${HOST_SSH_USER:-root}"
 SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"

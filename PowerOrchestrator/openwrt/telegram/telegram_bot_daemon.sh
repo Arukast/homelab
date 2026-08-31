@@ -16,6 +16,11 @@ TB_COMP="/usr/bin/telegram_components"
 . "$TB_COMP"/polling_helper.sh
 . "$TB_COMP"/process_command_helper.sh
 
+# Load command handlers
+for cmd_file in "$TB_COMP"/commands/*_command.sh; do
+    . "$cmd_file"
+done
+
 
 # Read Config
 read_conf "/etc/homelab_power.conf"
@@ -40,14 +45,6 @@ is_telegram_bot_token
 
 # Check host alliveness
 is_host_alive
-
-# Helper to dynamically evaluate/expand strings containing variables
-expand_msg
-
-# Helper to send messages to Telegram with Markdown auto-fallback
-send_message
-
-process_command
 
 # Main polling loop
 poll_updates

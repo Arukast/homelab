@@ -108,7 +108,7 @@ Reason: ${msg}"
         fi
         
         # Check if there are any service maintenance files to clear
-        local files=$(ls ${MAINT_DIR}/service_* 2>/dev/null)
+        files=$(ls ${MAINT_DIR}/service_* 2>/dev/null)
         if [ -n "$files" ]; then
             for f in $files; do
                 if [ -f "$f" ]; then
