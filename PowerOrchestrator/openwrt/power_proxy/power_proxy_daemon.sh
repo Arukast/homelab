@@ -13,8 +13,8 @@ PP_COMP="/usr/bin/power_proxy_components"
 . "$SHARED_COMP"/conf_helper.sh
 . "$SHARED_COMP"/check_helper.sh
 . "$PP_COMP"/notify_helper.sh
-. "$PP_COMP"/static_arp_helper.sh
 . "$PP_COMP"/redirects_helper.sh
+. "$PP_COMP"/network_helper.sh
 . "$PP_COMP"/listener_helper.sh
 . "$PP_COMP"/cleanup_helper.sh
 . "$PP_COMP"/main.sh
