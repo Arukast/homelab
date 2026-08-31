@@ -4,29 +4,21 @@
 # File: /usr/bin/homelab_config_sync.sh
 # =============================================================================
 
-# Load shared components from /usr/bin/components
-SHARED_COMP="/usr/bin/components"
-# Load power_proxy components from /usr/bin/homelab_config_sync.sh
-SYNC_COMP="/usr/bin/homelab_config_sync.sh"
+# Load common initialization (paths, config, SSH vars)
+. /usr/bin/components/common_init.sh
 
-# Load Helper
-. "$SHARED_COMP"/conf_helper.sh
+# Load config_sync-specific components
 . "$SYNC_COMP"/permission_helper.sh
 . "$SYNC_COMP"/verify_helper.sh
 . "$SYNC_COMP"/router_ip_helper.sh
 . "$SYNC_COMP"/sanitized_conf_helper.sh
 . "$SYNC_COMP"/deploy_helper.sh
 
-
 # Read Config
-read_conf "/etc/homelab_power.conf"
+init_common_config
 
-# Check IP
-check_ip
-
-SSH_KEY_PATH="${SSH_KEY_PATH:-/etc/dropbear/id_dropbear}"
-HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
-HOST_SSH_USER="${HOST_SSH_USER:-root}"
+# Initialize SSH connection parameters (also sets SSH_CMD used by deploy_helper)
+init_ssh_vars
 
 echo "===================================================="
 echo "Homelab Power Orchestrator Configuration Sync Tool"

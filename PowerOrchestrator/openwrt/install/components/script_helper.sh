@@ -13,6 +13,9 @@ install_scripts() {
     mkdir -p /usr/bin/telegram_components/commands
     cp telegram/components/*.sh /usr/bin/telegram_components/
     cp telegram/components/commands/*.sh /usr/bin/telegram_components/commands/
+    # Deploy config_sync components
+    mkdir -p /usr/bin/config_sync_components
+    cp config_sync/components/*.sh /usr/bin/config_sync_components/
 
     cp power_proxy/game_wake_listener.sh /usr/bin/game_wake_listener.sh
     cp power_proxy/guest_wake_listener.sh /usr/bin/guest_wake_listener.sh

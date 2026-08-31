@@ -5,22 +5,16 @@
 # Usage: /usr/bin/game_wake_listener.sh <port>
 # =============================================================================
 
-# Load shared components from /usr/bin/components
-SHARED_COMP="/usr/bin/components"
-# Load power_proxy components from /usr/bin/power_proxy_components
-PP_COMP="/usr/bin/power_proxy_components"
+# Load common initialization (paths, config, SSH vars)
+. /usr/bin/components/common_init.sh
 
-# Load Helper
-. "$SHARED_COMP"/conf_helper.sh
+# Load power_proxy-specific components
 . "$PP_COMP"/cleanup_helper.sh
 . "$PP_COMP"/network_helper.sh
 . "$PP_COMP"/listener_helper.sh
 
 # Read Config
-CONF="/etc/homelab_power.conf"
-MSG_CONF="/etc/homelab_messages.conf"
-read_conf "$CONF"
-read_optional_conf "$MSG_CONF"
+init_common_config
 
 PORT_RAW="$1"
 

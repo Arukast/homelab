@@ -4,14 +4,10 @@
 # File: /usr/bin/telegram_bot_daemon.sh
 # =============================================================================
 
-# Load shared components from /usr/bin/components
-SHARED_COMP="/usr/bin/components"
-# Load power_proxy components from /usr/bin/telegram_components
-TB_COMP="/usr/bin/telegram_components"
+# Load common initialization (paths, config, SSH vars)
+. /usr/bin/components/common_init.sh
 
-# Load Helper
-. "$SHARED_COMP"/conf_helper.sh
-. "$SHARED_COMP"/check_helper.sh
+# Load telegram-specific components
 . "$TB_COMP"/message_helper.sh
 . "$TB_COMP"/polling_helper.sh
 . "$TB_COMP"/process_command_helper.sh
@@ -21,24 +17,14 @@ for cmd_file in "$TB_COMP"/commands/*_command.sh; do
     . "$cmd_file"
 done
 
-
 # Read Config
-read_conf "/etc/homelab_power.conf"
-check_ip "/etc/homelab_power.conf"
-read_optional_conf "/etc/homelab_messages.conf"
+init_common_config
+
+# Initialize SSH connection parameters
+init_ssh_vars
 
 PIDFILE="/var/run/telegram_bot_daemon.pid"
-HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
-HOST_SSH_USER="${HOST_SSH_USER:-root}"
-SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
-
-is_pid_running "$PIDFILE" "telegram_bot_daemon.sh"
-
-cleanup_pid() {
-    rm -f "$PIDFILE"
-    exit 0
-}
-trap cleanup_pid SIGTERM SIGINT EXIT
+init_daemon_pid "$PIDFILE" "telegram_bot_daemon.sh"
 
 # Check token
 is_telegram_bot_token

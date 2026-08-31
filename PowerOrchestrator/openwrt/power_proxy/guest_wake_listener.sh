@@ -5,30 +5,23 @@
 # Usage: /usr/bin/guest_wake_listener.sh <guest_ip> <port>[/udp|/tcp] <vmid>
 # =============================================================================
 
-# Load shared components from /usr/bin/components
-SHARED_COMP="/usr/bin/components"
-# Load power_proxy components from /usr/bin/power_proxy_components
-PP_COMP="/usr/bin/power_proxy_components"
+# Load common initialization (paths, config, SSH vars)
+. /usr/bin/components/common_init.sh
 
-# Load Helper
-. "$SHARED_COMP"/conf_helper.sh
-. "$SHARED_COMP"/check_helper.sh
+# Load power_proxy-specific components
 . "$PP_COMP"/cleanup_helper.sh
 . "$PP_COMP"/network_helper.sh
 . "$PP_COMP"/listener_helper.sh
 
 # Read Config
-CONF="/etc/homelab_power.conf"
-MSG_CONF="/etc/homelab_messages.conf"
-read_conf $CONF
-read_optional_conf $MSG_CONF
+init_common_config
+
+# Initialize SSH connection parameters
+init_ssh_vars
 
 GUEST_IP="$1"
 PORT_RAW="$2"
 VMID="$3"
-HOST_SSH_PORT="${HOST_SSH_PORT:-${SSH_PORT:-22}}"
-HOST_SSH_USER="${HOST_SSH_USER:-root}"
-SSH_CMD="ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP"
 IFACE="${LAN_INTERFACE:-br-lan}"
 
 if [ -z "$GUEST_IP" ] || [ -z "$PORT_RAW" ] || [ -z "$VMID" ]; then

@@ -33,7 +33,7 @@ is_host_alive() {
 # Check token
 is_telegram_bot_token() {
     if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
-        echo "ERROR: BOT_TOKEN is not configured in $CONF" >&2
+        echo "ERROR: BOT_TOKEN is not configured in /etc/homelab_power.conf" >&2
         exit 1
     fi
 }

@@ -52,3 +52,4 @@ maintenance_command() {
             send_message "$chat_id" "Unknown subcommand. Use: system, service, off, status"
             ;;
     esac
+}
