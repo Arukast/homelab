@@ -4,6 +4,11 @@
 # File: /usr/bin/power_proxy_daemon.sh
 # =============================================================================
 
+# Load helper
+. "$(dirname "$0")"/../components/helper_packages.sh
+
+
+
 CONF="/etc/homelab_power.conf"
 if [ ! -f "$CONF" ]; then
     echo "ERROR: Configuration file $CONF not found." >&2
@@ -38,7 +43,7 @@ GAME_PIDS=""
 notify() {
     local msg="$1"
     echo "[Power Proxy] $msg"
-    
+
     # Centralized dispatch via local helper
     /usr/bin/homelab_notify.sh "$msg" &
 }
@@ -74,19 +79,19 @@ apply_static_arp() {
 # Apply Nat Redirect rules dynamically
 apply_redirects() {
     echo "Host is offline. Activating dynamic HTTP/HTTPS proxy redirects..."
-    
+
     if command -v nft >/dev/null 2>&1; then
         # Modern OpenWrt (nftables)
         # We create a dedicated nat table 'homelab_power_nat' which can be instantly deleted
         nft delete table inet homelab_power_nat 2>/dev/null
         nft create table inet homelab_power_nat
         nft add chain inet homelab_power_nat dstnat "{ type nat hook prerouting priority dstnat - 5 ; policy accept ; }"
-        
+
         # Add HTTP Redirects (to port 8080)
         for port in $(echo "$HTTP_REDIRECT_PORTS" | tr ',' ' '); do
             nft add rule inet homelab_power_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8080
         done
-        
+
         # Add HTTPS Redirects (to port 8443)
         for port in $(echo "$HTTPS_REDIRECT_PORTS" | tr ',' ' '); do
             nft add rule inet homelab_power_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8443
@@ -95,7 +100,7 @@ apply_redirects() {
         # Older OpenWrt (iptables)
         # Flush any existing rules first to prevent duplicates
         remove_redirects
-        
+
         for port in $(echo "$HTTP_REDIRECT_PORTS" | tr ',' ' '); do
             iptables -t nat -I PREROUTING -p tcp -d "$HOST_IP" --dport "$port" -j REDIRECT --to-ports 8080
         done
@@ -108,7 +113,7 @@ apply_redirects() {
 # Remove Nat Redirect rules dynamically
 remove_redirects() {
     echo "Host is online. Deactivating HTTP/HTTPS proxy redirects..."
-    
+
     if command -v nft >/dev/null 2>&1; then
         # Modern OpenWrt (nftables)
         nft delete table inet homelab_power_nat 2>/dev/null
@@ -131,7 +136,7 @@ start_game_listeners() {
     fi
     echo "Starting Game Wake-on-Demand listeners..."
     GAME_PIDS=""
-    
+
     for port in $(echo "$GAME_REDIRECT_PORTS" | tr ',' ' '); do
         if [ -n "$port" ]; then
             /usr/bin/game_wake_listener.sh "$port" &
@@ -143,7 +148,7 @@ start_game_listeners() {
 # Stop Game Listeners
 stop_game_listeners() {
     echo "Stopping Game Wake-on-Demand listeners..."
-    
+
     # Clean up background listeners by PID
     if [ -n "$GAME_PIDS" ]; then
         for pid in $GAME_PIDS; do
@@ -151,7 +156,7 @@ stop_game_listeners() {
         done
         GAME_PIDS=""
     fi
-    
+
     # Also grep kill to ensure no orphaned listeners remain
     pkill -f "game_wake_listener.sh" 2>/dev/null
 }
@@ -162,17 +167,17 @@ manage_guest_listeners() {
     if [ "$ENABLE_PORT_WAKE_LISTENERS" = "0" ]; then
         return
     fi
-    
+
     for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
         VMID=$(echo "$entry" | cut -d':' -f1)
         GUEST_IP=$(echo "$entry" | cut -d':' -f2)
         PORT_RAW=$(echo "$entry" | cut -d':' -f3)
-        
+
         # Skip Wake-on-Demand listeners if no port is defined
         if [ -z "$PORT_RAW" ]; then
             continue
         fi
-        
+
         if ping -c 1 -W 1 "$GUEST_IP" >/dev/null 2>&1; then
             if pgrep -f "guest_wake_listener.sh $GUEST_IP " >/dev/null 2>&1; then
                 echo "Guest [$VMID] ($GUEST_IP) came online. Terminating listener..."
@@ -194,7 +199,7 @@ manage_guest_listeners() {
 stop_guest_listeners() {
     echo "Stopping all individual guest Wake-on-Demand listeners..."
     pkill -f "guest_wake_listener.sh" 2>/dev/null
-    
+
     if [ -n "$GUEST_ORCHESTRATION_MAP" ]; then
         for entry in $(echo "$GUEST_ORCHESTRATION_MAP" | tr ',' ' '); do
             GUEST_IP=$(echo "$entry" | cut -d':' -f2)
@@ -229,7 +234,7 @@ while true; do
         if [ "$CURRENT_STATE" != "UP" ]; then
             remove_redirects
             stop_game_listeners
-            
+
             if [ "$CURRENT_STATE" != "UNKNOWN" ]; then
                 if [ "$CURRENT_STATE" = "DOWN_REBOOT" ]; then
                     notify "$MSG_DAEMON_REBOOT_AWAKE"
@@ -243,21 +248,21 @@ while true; do
             rm -f /tmp/waking_host
             CURRENT_STATE="UP"
         fi
-        
+
         # Manage individual guest listeners when host is online
         manage_guest_listeners
     else
         # Host is OFFLINE / SLEEPING
         FAILED_PINGS=$((FAILED_PINGS + 1))
-        
+
         if [ "$FAILED_PINGS" -ge "$PING_RETRIES" ] && [ "$CURRENT_STATE" != "DOWN" ] && [ "$CURRENT_STATE" != "DOWN_SHUTDOWN" ] && [ "$CURRENT_STATE" != "DOWN_REBOOT" ]; then
             # Stop any guest listeners because the entire host is sleeping/offline
             stop_guest_listeners
-            
+
             # Read intended target state
             TARGET_STATE=$(cat /tmp/homelab_target_state 2>/dev/null)
             [ -z "$TARGET_STATE" ] && TARGET_STATE="SLEEP"
-            
+
             if [ "$TARGET_STATE" = "SHUTDOWN" ]; then
                 if [ "$CURRENT_STATE" != "UNKNOWN" ]; then
                     notify "$MSG_DAEMON_SHUTDOWN"
@@ -272,7 +277,7 @@ while true; do
                 # Default S3 Sleep
                 apply_redirects
                 start_game_listeners
-                
+
                 if [ "$CURRENT_STATE" != "UNKNOWN" ]; then
                     notify "$MSG_DAEMON_SLEEP"
                 fi
@@ -280,9 +285,9 @@ while true; do
             fi
         fi
     fi
-    
+
     # Re-apply static ARP periodically in case of table flushes
     apply_static_arp
-    
+
     sleep "$CHECK_INTERVAL"
 done
