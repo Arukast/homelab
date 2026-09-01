@@ -11,14 +11,11 @@ vmstart_command() {
         return
     fi
 
-    # We run the entire waking & starting sequence in the background to prevent daemon blocking
     (
-        # Check if host is offline, if so wake it first
         if ! is_host_alive; then
             send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..."
             etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"
 
-            # Wait for host to come online and respond to SSH
             send_message "$chat_id" "Waiting for Proxmox host to boot and respond to SSH (typically 30-45 seconds)..."
 
             local success=0
@@ -42,7 +39,7 @@ vmstart_command() {
             send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot Virtual Machine..."
         fi
 
-        send_message "$chat_id" "[Start] Starting Virtual Machine $arg1..."
+        send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")"
         if ! $SSH_CMD "qm status $arg1" >/dev/null 2>&1; then
             send_message "$chat_id" "[Error] Virtual Machine ID $arg1 not found on Proxmox. (If this is an LXC, use /ctstart $arg1)"
             return
@@ -58,7 +55,6 @@ vmstart_command() {
 ${clean_out:-Command failed with exit code $ret}
 \`\`\`"
         else
-            # Filter benign PCI reset and TPM state warnings on successful start
             local display_out=$(echo "$clean_out" | grep -vE "failed to reset PCI device|error writing '1' to '/sys/bus/pci/devices/.*reset'|swtpm_setup:" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
             send_message "$chat_id" "[Success] VM $arg1 start response:
 \`\`\`

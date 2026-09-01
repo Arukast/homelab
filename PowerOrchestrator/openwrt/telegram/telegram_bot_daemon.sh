@@ -11,6 +11,7 @@
 . "$TB_COMP"/message_helper.sh
 . "$TB_COMP"/polling_helper.sh
 . "$TB_COMP"/process_command_helper.sh
+. "$TB_COMP"/command_helper.sh
 
 # Load command handlers
 for cmd_file in "$TB_COMP"/commands/*_command.sh; do
