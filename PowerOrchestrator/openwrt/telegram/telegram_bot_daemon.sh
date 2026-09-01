@@ -1,0 +1,37 @@
+#!/bin/sh
+# =============================================================================
+# OpenWrt Shell Telegram Bot Daemon for Homelab Power Control
+# File: /usr/bin/telegram_bot_daemon.sh
+# =============================================================================
+
+# Load common initialization (paths, config, SSH vars)
+. /usr/bin/components/common_init.sh
+
+# Load telegram-specific components
+. "$TB_COMP"/message_helper.sh
+. "$TB_COMP"/polling_helper.sh
+. "$TB_COMP"/process_command_helper.sh
+. "$TB_COMP"/command_helper.sh
+
+# Load command handlers
+for cmd_file in "$TB_COMP"/commands/*_command.sh; do
+    . "$cmd_file"
+done
+
+# Read Config
+init_common_config
+
+# Initialize SSH connection parameters
+init_ssh_vars
+
+PIDFILE="/var/run/telegram_bot_daemon.pid"
+init_daemon_pid "$PIDFILE" "telegram_bot_daemon.sh"
+
+# Check token
+is_telegram_bot_token
+
+# Check host alliveness
+is_host_alive
+
+# Main polling loop
+poll_updates

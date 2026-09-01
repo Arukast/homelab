@@ -1,9 +1,8 @@
 # Secret config (contains Telegram webhook URL)
 .env
 setup.conf
-homelab_power.conf
+power_homelab.conf
 docs/
-homelab-troubleshooting-reference.md
 
 # Editor / OS
 *.swp
