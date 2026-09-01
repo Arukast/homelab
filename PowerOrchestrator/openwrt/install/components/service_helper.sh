@@ -1,8 +1,8 @@
 #!/bin/sh
 
 install_services() {
-    cp telegram_bot.init /etc/init.d/telegram_bot
-    cp power_proxy.init /etc/init.d/power_proxy
+    cp /tmp/openwrt_powerorchestractor/telegram/telegram_bot.init /etc/init.d/telegram_bot
+    cp /tmp/openwrt_powerorchestractor/power_proxy/power_proxy.init /etc/init.d/power_proxy
 
     chmod +x /etc/init.d/telegram_bot
     chmod +x /etc/init.d/power_proxy

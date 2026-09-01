@@ -11,11 +11,11 @@ set -e
 cd "$(dirname "$0")"
 
 # Load helper
-. "$(dirname "$0")"/../components/packages_helper.sh
-. "$(dirname "$0")"/components/setup_conf_helper.sh
-. "$(dirname "$0")"/components/script_helper.sh
-. "$(dirname "$0")"/components/service_helper.sh
-. "$(dirname "$0")"/components/post_install_helper.sh
+. components/packages_helper.sh
+. components/setup_conf_helper.sh
+. components/script_helper.sh
+. components/service_helper.sh
+. components/post_install_helper.sh
 
 # Parse command line arguments
 FORCE_CONFIG=0

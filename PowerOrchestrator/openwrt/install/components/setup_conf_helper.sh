@@ -1,28 +1,28 @@
 #!/bin/sh
 
 setup_confs() {
-    if [ -f "/etc/homelab_power.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
-        echo "Configuration file /etc/homelab_power.conf already exists. Preserving it."
+    if [ -f "/etc/power_homelab.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
+        echo "Configuration file /etc/power_homelab.conf already exists. Preserving it."
         echo "Run this installer with the -f or --force flag to overwrite it with your laptop's version."
     else
-        if [ -f "homelab_power.conf" ]; then
-            cp homelab_power.conf /etc/homelab_power.conf
-            echo "Created/Overwrote /etc/homelab_power.conf from your custom local config file."
+        if [ -f "/tmp/openwrt_powerorchestractor/power_homelab.conf" ]; then
+            cp /tmp/openwrt_powerorchestractor/power_homelab.conf /etc/power_homelab.conf
+            echo "Created/Overwrote /etc/power_homelab.conf from your custom local config file."
         else
-            cp homelab_power.conf.example /etc/homelab_power.conf
-            echo "Created/Overwrote /etc/homelab_power.conf from the default template."
+            cp /tmp/openwrt_powerorchestractor/power_homelab.conf.example /etc/power_homelab.conf
+            echo "Created/Overwrote /etc/power_homelab.conf from the default template."
         fi
-        chmod 600 /etc/homelab_power.conf
+        chmod 600 /etc/power_homelab.conf
     fi
 
     # Setup Messages Configuration file
-    if [ -f "/etc/homelab_messages.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
-        echo "Message configuration file /etc/homelab_messages.conf already exists. Preserving it."
+    if [ -f "/etc/messages_homelab.conf" ] && [ "$FORCE_CONFIG" -ne 1 ]; then
+        echo "Message configuration file /etc/messages_homelab.conf already exists. Preserving it."
     else
-        if [ -f "homelab_messages.conf" ]; then
-            cp homelab_messages.conf /etc/homelab_messages.conf
-            echo "Created/Overwrote /etc/homelab_messages.conf from your local config file."
+        if [ -f "/tmp/openwrt_powerorchestractor/messages_homelab.conf" ]; then
+            cp /tmp/openwrt_powerorchestractor/messages_homelab.conf /etc/messages_homelab.conf
+            echo "Created/Overwrote /etc/messages_homelab.conf from your local config file."
         fi
-        chmod 600 /etc/homelab_messages.conf
+        chmod 600 /etc/messages_homelab.conf
     fi
 }

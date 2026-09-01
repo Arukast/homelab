@@ -136,13 +136,13 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
 1. **Transfer the OpenWrt files**:
    Transfer the `openwrt/` directory of this suite to your OpenWrt router (e.g., via SCP):
    ```bash
-   ssh root@192.168.1.1 "rm -rf /tmp/openwrt"
-   scp -O -r PowerOrchestrator/openwrt root@192.168.1.1:/tmp/openwrt_install
+   ssh root@192.168.1.1 "rm -rf /tmp/openwrt_powerorchestractor"
+   scp -O -r PowerOrchestrator/openwrt root@192.168.1.1:/tmp/openwrt_powerorchestractor
    ```
 2. **Run the Installer**:
    SSH into the OpenWrt router and execute the installer:
    ```bash
-   sh /tmp/openwrt_install/install/install_openwrt.sh
+   sh /tmp/openwrt_powerorchestractor/install/install_openwrt.sh
    ```
    *Note: This automatically installs required system packages (etherwake, etc.), deploys the modular scripts to `/usr/bin/`, and activates the procd daemon services for the power proxy and Telegram bot.*
 
