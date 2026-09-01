@@ -8,8 +8,9 @@
 # Common: check host aliveness and send appropriate offline message
 cmd_check_host_alive() {
     local chat_id="$1"
+    local message_id="$2"
     if ! is_host_alive; then
-        send_message "$chat_id" "$MSG_HOST_OFFLINE"
+        send_message "$chat_id" "$MSG_HOST_OFFLINE" "" "$message_id"
         return 1
     fi
     return 0
@@ -19,6 +20,7 @@ cmd_check_host_alive() {
 # Sets blocking_guests variable if guests found; returns 1 if blocking, 0 otherwise
 cmd_blocking_guests_check() {
     local chat_id="$1"
+    local message_id="$2"
     local running_guests="$($SSH_CMD "pct list | awk 'NR>1 && \$2==\"running\" {print \$1}'; qm list | awk 'NR>1 && \$3==\"running\" {print \$1}'" 2>/dev/null)"
     local blocking_guests=""
 
@@ -41,9 +43,39 @@ cmd_blocking_guests_check() {
         local clean_blocking=$(echo "$blocking_guests" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
         send_message "$chat_id" "*Shutdown Blocked:* Core power actions are blocked because active non-exempt guest(s) are running: *${clean_blocking}*.
 
-Please stop them first, or use \`/hostshutdownforce\`."
+Please stop them first, or use \`/hostshutdownforce\`." "" "$message_id"
         return 1
     fi
+    return 0
+}
+
+# Check if system or specific service is under maintenance
+cmd_check_maintenance_active() {
+    local chat_id="$1"
+    local message_id="$2"
+    local cmd_str="$3"
+    local target_id="$4"
+
+    # Check System Maintenance
+    if [ -f "/etc/homelab_maintenance/system" ]; then
+        local reason=$(cat "/etc/homelab_maintenance/system")
+        send_message "$chat_id" "⚠️ *Action Blocked:* System-wide maintenance is ACTIVE.
+Reason: _${reason}_
+Command \`$cmd_str\` is prohibited." "" "$message_id"
+        return 1
+    fi
+
+    # Check Service Maintenance
+    if [ -n "$target_id" ]; then
+        if [ -f "/etc/homelab_maintenance/service_${target_id}" ]; then
+            local reason=$(cat "/etc/homelab_maintenance/service_${target_id}")
+            send_message "$chat_id" "⚠️ *Action Blocked:* Service *${target_id}* is under maintenance.
+Reason: _${reason}_
+Command \`$cmd_str\` is prohibited." "" "$message_id"
+            return 1
+        fi
+    fi
+
     return 0
 }
 
@@ -52,9 +84,10 @@ validate_numeric_arg() {
     local chat_id="$1"
     local val="$2"
     local label="$3"
+    local message_id="$4"
 
     if ! echo "$val" | grep -qE "^[0-9]+$"; then
-        send_message "$chat_id" "Error: $label must be numeric."
+        send_message "$chat_id" "Error: $label must be numeric." "" "$message_id"
         return 1
     fi
     return 0

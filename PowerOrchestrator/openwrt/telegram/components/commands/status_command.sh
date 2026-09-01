@@ -1,20 +1,24 @@
 #!/bin/bash
 
 status_command() {
+    local chat_id="$1"
+    local msg_id="$2"
+
+    # Initial query message
     send_message "$chat_id" "$MSG_BOT_QUERY_STATUS"
 
     if ! is_host_alive; then
         local markup='{"inline_keyboard":[
-            [{"text":"Wake Host","callback_data":"/wake"},{"text":"Refresh","callback_data":"/status"}]
+            [{"text":"⚡ Wake Host (WoL)","callback_data":"cmd:wake:0:execute"},{"text":"🔄 Refresh Status","callback_data":"cmd:status:0:refresh"}]
         ]}'
-        send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")" "$markup"
+        send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")" "$markup" "$msg_id"
         return
     fi
 
     # Host is online, gather all metrics in a single SSH connection payload!
     local metrics_payload=$($SSH_CMD "echo '===METRICS==='; uptime; echo '===RAM==='; free -h; echo '===LXC==='; pct list; echo '===VM==='; qm list" 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$metrics_payload" ]; then
-        send_message "$chat_id" "$MSG_BOT_SSH_FAILED"
+        send_message "$chat_id" "$MSG_BOT_SSH_FAILED" "$msg_id"
         return
     fi
 
@@ -36,8 +40,8 @@ status_command() {
 • QEMU VMs: ${vm_running}/${vm_count} running"
 
     local markup='{"inline_keyboard":[
-        [{"text":"List VMs","callback_data":"/list"},{"text":"Sleep (Safe)","callback_data":"/sleep"}],
-        [{"text":"Refresh","callback_data":"/status"}]
+        [{"text":"📋 List Nodes","callback_data":"cmd:list:0:refresh"},{"text":"🌙 Sleep Host","callback_data":"cmd:sleep:0:execute"}],
+        [{"text":"⚡ Host Power","callback_data":"cmd:power:0:menu"},{"text":"🔄 Refresh Status","callback_data":"cmd:status:0:refresh"}]
     ]}'
-    send_message "$chat_id" "$status_msg" "$markup"
+    send_message "$chat_id" "$status_msg" "$markup" "$msg_id"
 }

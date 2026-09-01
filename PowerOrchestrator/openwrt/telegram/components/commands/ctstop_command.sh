@@ -4,6 +4,7 @@ ctstop_command() {
     local vmid="$arg1" # Use arg1 which is already parsed
 
     validate_numeric_arg "$chat_id" "$vmid" "VMID" || return
+    cmd_check_maintenance "$chat_id" "service" "$vmid" || return
 
     if ! is_host_alive; then
         send_message "$chat_id" "$MSG_HOST_OFFLINE"

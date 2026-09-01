@@ -50,6 +50,8 @@ poll_updates() {
                 USER_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.from.id")
                 CHAT_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.message.chat.id")
                 CMD_TEXT=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.data")
+                # Capture the source message id so menu handlers can update in place
+                CALLBACK_MSG_ID=$(echo "$UPDATES" | jsonfilter -e "@.result[$i].callback_query.message.message_id")
             fi
 
             # Advance offset to acknowledge this update safely (preventing empty string shell errors)
@@ -81,10 +83,13 @@ poll_updates() {
                             send_message "$CHAT_ID" "$(expand_msg "$MSG_BOT_UNAUTHORIZED")"
                         fi
                     else
-                        # Execute commands starting with a slash
-                        if echo "$CMD_TEXT" | grep -qE "^/"; then
+                        # Execute interactive callback actions or slash commands
+                        if echo "$CMD_TEXT" | grep -qE "^action:"; then
+                            echo "Running action: $CMD_TEXT from authorized User ID: $USER_ID"
+                            process_action "$CMD_TEXT" "$CHAT_ID" "${CALLBACK_MSG_ID:-}"
+                        elif echo "$CMD_TEXT" | grep -qE "^/"; then
                             echo "Running command: $CMD_TEXT from authorized User ID: $USER_ID"
-                            process_command "$CMD_TEXT" "$CHAT_ID"
+                            process_command "$CMD_TEXT" "$CHAT_ID" "${CALLBACK_MSG_ID:-}"
                         elif [ "$CHAT_ID" = "$USER_ID" ]; then
                             # In private chat, if authorized user sends plain text (e.g. 'status', 'help', 'hi'), show command menu or execute match
                             echo "Received non-slash message '$CMD_TEXT' from authorized User ID: $USER_ID. Replying with command menu."
