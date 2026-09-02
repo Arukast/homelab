@@ -5,7 +5,7 @@ hostshutdown_command() {
     local command_str="/hostshutdown"
 
     if ! cmd_check_host_alive "$chat_id" "$message_id"; then return; fi
-    if ! cmd_check_maintenance_active "$chat_id" "$message_id" "$command_str"; then return; fi
+    if ! cmd_require_maintenance "$chat_id" "$message_id" "$command_str"; then return; fi
     if ! cmd_blocking_guests_check "$chat_id" "$message_id"; then return; fi
 
     send_message "$chat_id" "$(expand_msg "$MSG_BOT_SHUTDOWN_SENDING")" "" "$message_id"

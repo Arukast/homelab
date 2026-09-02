@@ -18,7 +18,7 @@ node_command() {
     fi
 
     # Enforce Maintenance Mode
-    if ! cmd_check_maintenance "$chat_id" "$type" "$vmid"; then
+    if ! cmd_check_maintenance_active "$chat_id" "$msg_id" "/node $type $vmid $operation"; then
         # Maintenance check already sent its own message
         return
     fi

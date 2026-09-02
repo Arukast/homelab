@@ -79,7 +79,21 @@ Command \`$cmd_str\` is prohibited." "" "$message_id"
     return 0
 }
 
-# Helper to validate that an argument is a numeric VMID/CTID
+# Ensure system is UNDER maintenance before allowing an action
+cmd_require_maintenance() {
+    local chat_id="$1"
+    local message_id="$2"
+    local cmd_str="$3"
+
+    if [ ! -f "/etc/homelab_maintenance/system" ]; then
+        send_message "$chat_id" "⚠️ *Action Blocked:* The host is currently in its *Active Window*.
+Core power actions are prohibited to prevent accidental downtime.
+
+Please enable maintenance mode first, or use the \`force\` version of this command (e.g., \`$cmd_str'force\`)." "" "$message_id"
+        return 1
+    fi
+    return 0
+}
 validate_numeric_arg() {
     local chat_id="$1"
     local val="$2"
