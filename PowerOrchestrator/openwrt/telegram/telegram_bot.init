@@ -11,10 +11,10 @@ USE_PROCD=1
 
 start_service() {
     # Check config exists
-    [ -f "/etc/homelab_power.conf" ] || return 1
-    
+    [ -f "/etc/power_homelab.conf" ] || return 1
+
     # Load config and verify enabled
-    . /etc/homelab_power.conf
+    . /etc/power_homelab.conf
     if [ -z "$BOT_TOKEN" ] || [ "$BOT_TOKEN" = "YOUR_TELEGRAM_BOT_TOKEN" ]; then
         echo "Telegram Bot not configured, skipping..."
         return 1

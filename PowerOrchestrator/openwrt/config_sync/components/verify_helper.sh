@@ -5,11 +5,12 @@ verify_ssh() {
 }
 
 ssh_cmd() {
-    "ssh -p $HOST_SSH_PORT -i $SSH_KEY_PATH -y -K 3 ${HOST_SSH_USER}@$HOST_IP $1"
+    ssh -p "$HOST_SSH_PORT" -i "$SSH_KEY_PATH" -y -K 3 "${HOST_SSH_USER}@$HOST_IP" "$1"
 }
 
 ssh_test() {
-    if [ "$(ssh_cmd 'echo OK') 2>&1" != "OK" ]; then
+    SSH_TEST_OUTPUT=$(ssh_cmd 'echo OK' 2>&1)
+    if [ "$SSH_TEST_OUTPUT" != "OK" ]; then
         echo "Error: Cannot establish passwordless SSH trust. SSH command failed." >&2
         echo "SSH Output / Error:" >&2
         echo "----------------------------------------------------" >&2

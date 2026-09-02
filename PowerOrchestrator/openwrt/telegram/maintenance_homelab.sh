@@ -14,7 +14,7 @@ notify() {
 show_status() {
     local active=0
     local status_msg=""
-    
+
     if [ -f "${MAINT_DIR}/system" ]; then
         local msg=$(cat "${MAINT_DIR}/system")
         status_msg="⚠️ *System Maintenance is ACTIVE*
@@ -23,11 +23,11 @@ Reason: _${msg:-No message specified}_"
     else
         status_msg="✅ *System Maintenance is INACTIVE*"
     fi
-    
+
     status_msg="${status_msg}
 
 *Service Maintenance Status:*"
-    
+
     local files=$(ls ${MAINT_DIR}/service_* 2>/dev/null)
     if [ -n "$files" ]; then
         for f in $files; do
@@ -41,7 +41,7 @@ Reason: _${msg:-No message specified}_"
         status_msg="${status_msg}
 No individual services under maintenance."
     fi
-    
+
     echo "$status_msg"
 }
 
@@ -54,7 +54,7 @@ case "$action" in
             echo "Usage: homelab_maintenance system \"<reason>\" | off"
             exit 1
         fi
-        
+
         if [ "$msg" = "off" ]; then
             if [ -f "${MAINT_DIR}/system" ]; then
                 rm -f "${MAINT_DIR}/system"
@@ -70,7 +70,7 @@ Reason: ${msg}"
             echo "System maintenance enabled: $msg"
         fi
         ;;
-        
+
     service)
         vmid="$2"
         msg="$3"
@@ -78,12 +78,12 @@ Reason: ${msg}"
             echo "Usage: homelab_maintenance service <vmid> \"<reason>\" | off"
             exit 1
         fi
-        
+
         if ! echo "$vmid" | grep -qE "^[0-9]+$"; then
             echo "Error: VMID must be numeric."
             exit 1
         fi
-        
+
         if [ "$msg" = "off" ]; then
             if [ -f "${MAINT_DIR}/service_${vmid}" ]; then
                 rm -f "${MAINT_DIR}/service_${vmid}"
@@ -99,14 +99,14 @@ Reason: ${msg}"
             echo "Service $vmid maintenance enabled: $msg"
         fi
         ;;
-        
+
     off)
         cleared=0
         if [ -f "${MAINT_DIR}/system" ]; then
             rm -f "${MAINT_DIR}/system"
             cleared=1
         fi
-        
+
         # Check if there are any service maintenance files to clear
         files=$(ls ${MAINT_DIR}/service_* 2>/dev/null)
         if [ -n "$files" ]; then
@@ -117,7 +117,7 @@ Reason: ${msg}"
                 fi
             done
         fi
-        
+
         if [ "$cleared" -eq 1 ]; then
             notify "🔧 *All maintenance settings cleared.* Homelab is fully operational."
             echo "All maintenance settings cleared."
@@ -125,11 +125,11 @@ Reason: ${msg}"
             echo "No active maintenance settings to clear."
         fi
         ;;
-        
+
     status|"")
         show_status
         ;;
-        
+
     *)
         echo "Usage: homelab_maintenance {system|service|off|status}"
         exit 1

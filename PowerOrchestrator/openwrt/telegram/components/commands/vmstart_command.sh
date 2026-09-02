@@ -1,8 +1,9 @@
 #!/bin/bash
 
 vmstart_command() {
-    local vmid="$arg1"
-    local message_id="$3"
+    local chat_id="$1"
+    local message_id="$2"
+    local vmid="$3"
     local command_str="/vmstart $vmid"
 
     if [ -z "$vmid" ]; then
@@ -41,7 +42,7 @@ vmstart_command() {
             send_message "$chat_id" "Host Online: Proxmox host is awake! Proceeding to boot Virtual Machine..." "" "$message_id"
         fi
 
-        send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_START_STARTING")" "" "$message_id"
+        send_message "$chat_id" "$(expand_msg "$MSG_BOT_VM_START_STARTING")" "" "$message_id"
         if ! $SSH_CMD "qm status $vmid" >/dev/null 2>&1; then
             send_message "$chat_id" "[Error] Virtual Machine ID $vmid not found on Proxmox. (If this is an LXC, use /ctstart $vmid)" "" "$message_id"
             return

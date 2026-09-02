@@ -1,8 +1,9 @@
 #!/bin/bash
 
 ctstart_command() {
-    local vmid="$arg1"
-    local message_id="$3"
+    local chat_id="$1"
+    local message_id="$2"
+    local vmid="$3"
     local command_str="/ctstart $vmid"
 
     if [ -z "$vmid" ]; then
@@ -14,6 +15,10 @@ ctstart_command() {
     if ! cmd_check_maintenance_active "$chat_id" "$message_id" "$command_str"; then return; fi
 
     (
+        # Re-establish scope for the subshell
+        chat_id="$chat_id"
+        message_id="$message_id"
+
         if ! is_host_alive; then
             send_message "$chat_id" "Host is Offline: Dispatching Wake-on-LAN magic packet to wake Proxmox first..." "" "$message_id"
             etherwake -i "${LAN_INTERFACE:-br-lan}" "$HOST_MAC"

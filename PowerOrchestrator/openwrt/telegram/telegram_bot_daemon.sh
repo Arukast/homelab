@@ -8,6 +8,7 @@
 . /usr/bin/components/common_init.sh
 
 # Load telegram-specific components
+. "$TB_COMP"/liveness_monitor.sh
 . "$TB_COMP"/message_helper.sh
 . "$TB_COMP"/polling_helper.sh
 . "$TB_COMP"/process_command_helper.sh
@@ -29,6 +30,10 @@ init_daemon_pid "$PIDFILE" "telegram_bot_daemon.sh"
 
 # Check token
 is_telegram_bot_token
+
+# Start Liveness Monitor in background
+monitor_host_liveness &
+
 
 # Check host alliveness
 is_host_alive

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-deploy() {
+deploy_config() {
     echo "Deploying configuration to Proxmox..."
     if [ "$WRAPPER_ACTIVE" -eq 1 ]; then
         # Push via cat redirect permitted by wrapper
@@ -9,6 +9,7 @@ deploy() {
         # Fallback to standard scp if wrapper is not configured yet
         scp -P "$HOST_SSH_PORT" -i "$SSH_KEY_PATH" "$TEMP_CONF" ${HOST_SSH_USER}@$HOST_IP:/etc/homelab_power.conf >/dev/null
     fi
+
 
     if [ $? -eq 0 ]; then
         echo "Configuration successfully synchronized to Proxmox /etc/homelab_power.conf."

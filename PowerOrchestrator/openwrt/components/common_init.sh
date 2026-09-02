@@ -16,8 +16,8 @@ export SYNC_COMP="/usr/bin/config_sync_components" # This will be the new path f
 
 # Function to load common configurations
 init_common_config() {
-    local config_file="${1:-/etc/homelab_power.conf}"
-    local msg_config_file="${2:-/etc/homelab_messages.conf}"
+    local config_file="${1:-/etc/power_homelab.conf}"
+    local msg_config_file="${2:-/etc/messages_homelab.conf}"
 
     read_conf "$config_file"
     check_ip "$config_file" # Use config_file for error message consistency

@@ -1,6 +1,6 @@
 # =============================================================================
 # OpenWrt Homelab Power Orchestrator Configuration (Template)
-# File: /etc/homelab_power.conf
+# File: /etc/power_homelab.conf
 # =============================================================================
 
 # --- Telegram Bot Credentials ---
@@ -39,7 +39,7 @@ HOST_SSH_PORT="22"
 HOST_SSH_USER="root"
 
 # --- Network Wake-on-Demand Ports ---
-# Comma-separated list of HTTP TCP ports on the Proxmox host that should be intercepted 
+# Comma-separated list of HTTP TCP ports on the Proxmox host that should be intercepted
 # and redirected to the beautiful local waking page (port 8080) when Proxmox is sleeping.
 HTTP_REDIRECT_PORTS="80,8123"
 
@@ -51,7 +51,7 @@ HTTPS_REDIRECT_PORTS="443,8006"
 # Comma-separated list of game ports that should run local wake listeners when Proxmox
 # is sleeping. When a client tries to connect, it triggers a wake-on-LAN immediately.
 # Syntax: Add '/udp' suffix for UDP ports. Defaults to TCP if no suffix is specified.
-# Common: 
+# Common:
 # - 25565: Minecraft Java (TCP)
 # - 19132/udp: Minecraft Bedrock (UDP)
 # - 27015/udp,27016/udp: Unturned Steam Server (UDP query and game ports)
@@ -68,7 +68,7 @@ PING_RETRIES="3"
 # --- Multi-Guest Dynamic Orchestration Map ---
 # Comma-separated list of individual VMs/LXCs that should auto-sleep/wake dynamically.
 # Format: "VMID:IP_ADDRESS:PORT/PROTOCOL:IDLE_MINUTES"
-# Must match the settings configured in Proxmox /etc/homelab_power.conf.
+# Must match the settings configured in Proxmox /etc/power_homelab.conf.
 # Example: "101:192.168.11.50:25565/tcp:15,102:192.168.11.60:19132/udp:15"
 # Leave empty if not using individual guest sleep/wake orchestration.
 GUEST_ORCHESTRATION_MAP=""
@@ -129,7 +129,7 @@ GUEST_MESSAGE_MAP="120:Welcome to Minecraft!,122:Welcome to Unturned!"
 GUEST_PORT_MAP=""
 
 # --- Proxmox Host Idle Detection & Suspension Settings ---
-# These parameters will be synchronized to Proxmox /etc/homelab_power.conf
+# These parameters will be synchronized to Proxmox /etc/power_homelab.conf
 
 # CPU load average threshold to consider system idle (e.g. 0.15 = 15% of a core/system capacity)
 CPU_THRESHOLD="0.15"

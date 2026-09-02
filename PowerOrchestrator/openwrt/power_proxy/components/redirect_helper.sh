@@ -6,19 +6,19 @@ apply_redirects() {
 
     if command -v nft >/dev/null 2>&1; then
         # Modern OpenWrt (nftables)
-        # We create a dedicated nat table 'homelab_power_nat' which can be instantly deleted
-        nft delete table inet homelab_power_nat 2>/dev/null
-        nft create table inet homelab_power_nat
-        nft add chain inet homelab_power_nat dstnat "{ type nat hook prerouting priority dstnat - 5 ; policy accept ; }"
+        # We create a dedicated nat table 'power_homelab_nat' which can be instantly deleted
+        nft delete table inet power_homelab_nat 2>/dev/null
+        nft create table inet power_homelab_nat
+        nft add chain inet power_homelab_nat dstnat "{ type nat hook prerouting priority dstnat - 5 ; policy accept ; }"
 
         # Add HTTP Redirects (to port 8080)
         for port in $(echo "$HTTP_REDIRECT_PORTS" | tr ',' ' '); do
-            nft add rule inet homelab_power_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8080
+            nft add rule inet power_homelab_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8080
         done
 
         # Add HTTPS Redirects (to port 8443)
         for port in $(echo "$HTTPS_REDIRECT_PORTS" | tr ',' ' '); do
-            nft add rule inet homelab_power_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8443
+            nft add rule inet power_homelab_nat dstnat ip daddr "$HOST_IP" tcp dport "$port" redirect to :8443
         done
     else
         # Older OpenWrt (iptables)
@@ -40,7 +40,7 @@ remove_redirects() {
 
     if command -v nft >/dev/null 2>&1; then
         # Modern OpenWrt (nftables)
-        nft delete table inet homelab_power_nat 2>/dev/null
+        nft delete table inet power_homelab_nat 2>/dev/null
     else
         # Older OpenWrt (iptables)
         for port in $(echo "$HTTP_REDIRECT_PORTS" | tr ',' ' '); do

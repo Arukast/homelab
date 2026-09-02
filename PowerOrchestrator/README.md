@@ -144,6 +144,10 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    ```bash
    sh /tmp/openwrt_powerorchestractor/install/install_openwrt.sh
    ```
+   or
+   ```bash
+   sh /tmp/openwrt_powerorchestractor/install/install_openwrt.sh --force
+   ```
    *Note: This automatically installs required system packages (etherwake, etc.), deploys the modular scripts to `/usr/bin/`, and activates the procd daemon services for the power proxy and Telegram bot.*
 
 3. **Configure Credentials, IPs, and Custom Messages**:
@@ -180,6 +184,12 @@ The OpenWrt router needs passwordless access to the Proxmox VE host to safely ex
    /etc/init.d/power_proxy restart
    /etc/init.d/telegram_bot restart
    ```
+
+6. **Log Telegram Bot**
+   ```bash
+   logread -f | grep telegram_bot
+   ```
+
 
 ---
 

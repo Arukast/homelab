@@ -51,7 +51,7 @@ ${vms}"
             cmd = (status == "running" ? "cmd:node:" vmid ":stop" : "cmd:node:" vmid ":start");
             printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
         }
-    ' | paste -sd, -)
+    ' | tr '\n' ',' | sed 's/,$//')
 
     local vm_buttons=$(echo "$payload" | awk '
         /===VM===/{flag=1; next}
@@ -62,7 +62,7 @@ ${vms}"
             cmd = (status == "running" ? "cmd:node:" vmid ":stop" : "cmd:node:" vmid ":start");
             printf "[{\"text\":\"%s\",\"callback_data\":\"%s\"}]", btn_text, cmd
         }
-    ' | paste -sd, -)
+    ' | tr '\n' ',' | sed 's/,$//')
 
     local all_buttons=""
     if [ -n "$lxc_buttons" ] && [ -n "$vm_buttons" ]; then

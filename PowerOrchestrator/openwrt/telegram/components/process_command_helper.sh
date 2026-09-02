@@ -173,6 +173,8 @@ process_action() {
             fi
             ;;
         *)
+            # Fall back to sending an error message inline rather than calling send_message
+            # if the function is somehow unavailable, to prevent a crash loop
             send_message "$chat_id" "Invalid action format."
             ;;
     esac
