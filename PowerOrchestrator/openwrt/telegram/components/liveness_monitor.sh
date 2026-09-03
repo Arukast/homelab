@@ -5,6 +5,10 @@
 # =============================================================================
 
 monitor_host_liveness() {
+    # Ensure only one instance of the monitor runs
+    local LIVENESS_PIDFILE="/var/run/telegram_liveness_monitor.pid"
+    init_daemon_pid "$LIVENESS_PIDFILE" "Host Liveness Monitor"
+
     echo "Starting Host Liveness Monitor..."
     
     # Initial state

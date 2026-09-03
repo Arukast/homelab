@@ -7,7 +7,7 @@ ctrestart_command() {
     local command_str="/ctrestart $vmid"
 
     if [ -z "$vmid" ]; then
-        send_message "$chat_id" "[Usage] /ctrestart <vmid>" "" "$message_id"
+        send_message "$chat_id" "$MSG_BOT_CT_RESTART_USAGE" "" "$message_id"
         return
     fi
 
@@ -19,9 +19,9 @@ ctrestart_command() {
         return
     fi
 
-    send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_RESTARTING")" "" "$message_id"
+    send_message "$chat_id" "$MSG_BOT_CT_RESTART_RESTARTING" "" "$message_id"
     if ! $SSH_CMD "pct status $vmid" >/dev/null 2>&1; then
-        send_message "$chat_id" "[Error] LXC container ID $vmid not found on Proxmox. (If this is a VM, use /vmrestart $vmid)" "" "$message_id"
+        export arg1="$vmid"; send_message "$chat_id" "$MSG_BOT_CT_RESTART_NOT_FOUND" "" "$message_id"
         return
     fi
 
@@ -30,10 +30,7 @@ ctrestart_command() {
     local ret=$?
     local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
     if [ $ret -ne 0 ]; then
-        send_message "$chat_id" "[Error] Failed to restart LXC ID $vmid:
-\`\`\`
-${clean_res:-Command failed with exit code $ret}
-\`\`\`" "" "$message_id"
+        export arg1="$vmid"; export arg2="${clean_res:-Command failed with exit code $ret}"; send_message "$chat_id" "$MSG_BOT_CT_RESTART_FAILED" "" "$message_id"
     else
         send_message "$chat_id" "$(expand_msg "$MSG_BOT_CT_RESTART_SUCCESS")
 \`\`\`

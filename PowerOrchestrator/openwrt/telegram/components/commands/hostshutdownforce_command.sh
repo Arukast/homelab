@@ -9,8 +9,8 @@ hostshutdownforce_command() {
         return 
     fi
 
-    send_message "$chat_id" "$(expand_msg "$MSG_BOT_SHUTDOWN_FORCE_SENDING")" "" "$message_id"
+    send_message "$chat_id" "$MSG_BOT_SHUTDOWN_FORCE_SENDING" "" "$message_id"
     echo "SHUTDOWN" > /tmp/homelab_target_state
     $SSH_CMD "nohup /usr/local/bin/proxmox_idle_monitor.sh --shutdown --force >/dev/null 2>&1 &" 2>/dev/null
-    send_message "$chat_id" "$(expand_msg "$MSG_BOT_SHUTDOWN_EXECUTED")" "" "$message_id"
+    send_message "$chat_id" "$MSG_BOT_SHUTDOWN_EXECUTED" "" "$message_id"
 }

@@ -80,7 +80,14 @@ process_command() {
             ;;
 
         /maintenance)
-            maintenance_command "$chat_id" "$msg_id" "$arg1"
+            # Use all remaining arguments for maintenance (e.g., /maintenance system on)
+            local full_cmd=$(echo "$cmd" | cut -d' ' -f2-)
+            # Pass arguments properly
+            if [ -z "$full_cmd" ]; then
+                maintenance_command "$chat_id" "$msg_id"
+            else
+                maintenance_command "$chat_id" "$msg_id" $full_cmd
+            fi
             ;;
 
         *)

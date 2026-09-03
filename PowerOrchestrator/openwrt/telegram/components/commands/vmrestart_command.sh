@@ -7,7 +7,7 @@ vmrestart_command() {
     local command_str="/vmrestart $vmid"
 
     if [ -z "$vmid" ]; then
-        send_message "$chat_id" "[Usage] /vmrestart <vmid>" "" "$message_id"
+        send_message "$chat_id" "$MSG_BOT_VM_RESTART_USAGE" "" "$message_id"
         return
     fi
 
@@ -19,9 +19,9 @@ vmrestart_command() {
         return
     fi
 
-    send_message "$chat_id" "[Restart] Sending reboot signal to Virtual Machine $vmid..." "" "$message_id"
+    export arg1="$vmid"; send_message "$chat_id" "$MSG_BOT_VM_RESTART_SENDING" "" "$message_id"
     if ! $SSH_CMD "qm status $vmid" >/dev/null 2>&1; then
-        send_message "$chat_id" "[Error] Virtual Machine ID $vmid not found on Proxmox. (If this is an LXC, use /ctrestart $vmid)" "" "$message_id"
+        export arg1="$vmid"; send_message "$chat_id" "$MSG_BOT_VM_RESTART_NOT_FOUND" "" "$message_id"
         return
     fi
 
@@ -30,14 +30,8 @@ vmrestart_command() {
     local ret=$?
     local clean_res=$(echo "$res_out" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
     if [ $ret -ne 0 ]; then
-        send_message "$chat_id" "[Error] Failed to restart VM ID $vmid:
-\`\`\`
-${clean_res:-Command failed with exit code $ret}
-\`\`\`" "" "$message_id"
+        export arg1="$vmid"; export arg2="${clean_res:-Command failed with exit code $ret}"; send_message "$chat_id" "$MSG_BOT_VM_RESTART_FAILED" "" "$message_id"
     else
-        send_message "$chat_id" "[Success] VM $vmid restart response:
-\`\`\`
-${clean_res:-Reboot signal dispatched}
-\`\`\`" "" "$message_id"
+        export arg1="$vmid"; export arg2="${clean_res:-Restart signal dispatched}"; send_message "$chat_id" "$MSG_BOT_VM_RESTART_SUCCESS" "" "$message_id"
     fi
 }

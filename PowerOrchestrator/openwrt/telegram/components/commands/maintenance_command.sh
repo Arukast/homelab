@@ -1,55 +1,63 @@
 #!/bin/bash
 
 maintenance_command() {
-    # Check if command is run inside openwrt or local mock environment
-    local maint_cmd="homelab_maintenance"
-    if [ -f "/usr/bin/homelab_maintenance" ]; then
-        maint_cmd="/usr/bin/homelab_maintenance"
-    elif [ -f "$(dirname "$0")/homelab_maintenance.sh" ]; then
-        maint_cmd="$(dirname "$0")/homelab_maintenance.sh"
-    fi
+    local chat_id="$1"
+    local message_id="$2"
+    local sub_cmd="$3"
+    local target="$4"
+    local reason="$5"
 
-    if [ -z "$arg1" ]; then
-        local maint_out=$($maint_cmd status)
-        send_message "$chat_id" "$maint_out"
+    if [ -z "$sub_cmd" ]; then
+        local markup=$(get_markup "maintenance")
+        send_message "$chat_id" "$MSG_BOT_MAINT_HELP" "$markup" "$message_id"
         return
     fi
 
-    case "$arg1" in
+    case "$sub_cmd" in
         system)
-            local msg=$(echo "$cmd" | cut -d' ' -f3-)
-            if [ -z "$msg" ] || [ "$msg" = "$cmd" ] || [ "$msg" = "$arg1" ]; then
-                send_message "$chat_id" "Usage: \`/maintenance system <reason>\` or \`/maintenance system off\`"
+            if [ -z "$target" ]; then
+                send_message "$chat_id" "$MSG_BOT_MAINT_USAGE_SYS" "" "$message_id"
                 return
             fi
-            local maint_out=$($maint_cmd system "$msg")
-            send_message "$chat_id" "$maint_out"
+            if [ "$target" == "off" ]; then
+                # Logic to turn off system maintenance
+                local maint_out=$(maintenance_set_system off)
+                send_message "$chat_id" "$maint_out" "" "$message_id"
+            else
+                # Logic to turn on system maintenance
+                local maint_out=$(maintenance_set_system on "$target")
+                send_message "$chat_id" "$maint_out" "" "$message_id"
+            fi
             ;;
         service)
-            local args=$(echo "$cmd" | cut -d' ' -f3-)
-            local vmid=$(echo "$args" | awk '{print $1}')
-            local msg=$(echo "$args" | cut -d' ' -f2-)
-            if [ -z "$vmid" ] || [ -z "$msg" ] || [ "$vmid" = "$args" ]; then
-                send_message "$chat_id" "Usage: \`/maintenance service <vmid> <reason>\` or \`/maintenance service <vmid> off\`"
+            if [ -z "$target" ]; then
+                send_message "$chat_id" "$MSG_BOT_MAINT_USAGE_SVC" "" "$message_id"
                 return
             fi
-            if ! echo "$vmid" | grep -qE "^[0-9]+$"; then
-                send_message "$chat_id" "Error: VMID must be numeric."
+            if ! [[ "$target" =~ ^[0-9]+$ ]]; then
+                send_message "$chat_id" "$MSG_BOT_MAINT_ERR_NUMERIC" "" "$message_id"
                 return
             fi
-            local maint_out=$($maint_cmd service "$vmid" "$msg")
-            send_message "$chat_id" "$maint_out"
-            ;;
-        off)
-            local maint_out=$($maint_cmd off)
-            send_message "$chat_id" "$maint_out"
+            if [ -z "$reason" ]; then
+                send_message "$chat_id" "$MSG_BOT_MAINT_USAGE_SVC" "" "$message_id"
+                return
+            fi
+            if [ "$reason" == "off" ]; then
+                # Logic to turn off service maintenance
+                local maint_out=$(maintenance_set_service "$target" off)
+                send_message "$chat_id" "$maint_out" "" "$message_id"
+            else
+                # Logic to turn on service maintenance
+                local maint_out=$(maintenance_set_service "$target" on "$reason")
+                send_message "$chat_id" "$maint_out" "" "$message_id"
+            fi
             ;;
         status)
-            local maint_out=$($maint_cmd status)
-            send_message "$chat_id" "$maint_out"
+            local maint_out=$(maintenance_status)
+            send_message "$chat_id" "$maint_out" "" "$message_id"
             ;;
         *)
-            send_message "$chat_id" "Unknown subcommand. Use: system, service, off, status"
+            send_message "$chat_id" "$MSG_BOT_MAINT_ERR_UNKNOWN" "" "$message_id"
             ;;
     esac
 }

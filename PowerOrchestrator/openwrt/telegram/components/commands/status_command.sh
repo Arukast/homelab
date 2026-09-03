@@ -8,9 +8,7 @@ status_command() {
     send_message "$chat_id" "$MSG_BOT_QUERY_STATUS"
 
     if ! is_host_alive; then
-        local markup='{"inline_keyboard":[
-            [{"text":"⚡ Wake Host (WoL)","callback_data":"cmd:wake:0:execute"},{"text":"🔄 Refresh Status","callback_data":"cmd:status:0:refresh"}]
-        ]}'
+        local markup=$(get_markup "status_offline")
         send_message "$chat_id" "$(expand_msg "$MSG_BOT_HOST_SLEEPING")" "$markup" "$msg_id"
         return
     fi
@@ -39,9 +37,6 @@ status_command() {
 • LXC Containers: ${lxc_running}/${lxc_count} running
 • QEMU VMs: ${vm_running}/${vm_count} running"
 
-    local markup='{"inline_keyboard":[
-        [{"text":"📋 List Nodes","callback_data":"cmd:list:0:refresh"},{"text":"🌙 Sleep Host","callback_data":"cmd:sleep:0:execute"}],
-        [{"text":"⚡ Host Power","callback_data":"cmd:power:0:menu"},{"text":"🔄 Refresh Status","callback_data":"cmd:status:0:refresh"}]
-    ]}'
+    local markup=$(get_markup "status_online")
     send_message "$chat_id" "$status_msg" "$markup" "$msg_id"
 }

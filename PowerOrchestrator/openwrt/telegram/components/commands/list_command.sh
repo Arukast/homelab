@@ -75,8 +75,8 @@ ${vms}"
 
     local markup=""
     if [ -n "$all_buttons" ]; then
-        # Main List Menu Keyboard
-        markup="{\"inline_keyboard\":[[$all_buttons],[{\"text\":\"🔙 Back to Main Menu\",\"callback_data\":\"cmd:menu:0:back\"}]]}"
+        local list_footer_markup=$(get_markup "list")
+        markup="{\"inline_keyboard\":[[$all_buttons],$(echo "$list_footer_markup" | jq -c '.inline_keyboard[] | .[]' | sed 's/\]\[/,/g')]}"
     fi
 
     send_message "$chat_id" "$list_msg" "$markup" "$msg_id"
