@@ -10,6 +10,7 @@
 # Load telegram-specific components
 . "$TB_COMP"/liveness_monitor.sh
 . "$TB_COMP"/message_helper.sh
+. "$TB_COMP"/maintenance_helper.sh
 . "$TB_COMP"/polling_helper.sh
 . "$TB_COMP"/process_command_helper.sh
 . "$TB_COMP"/command_helper.sh

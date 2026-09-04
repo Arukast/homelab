@@ -27,6 +27,10 @@ monitor_host_liveness() {
         # We can still monitor, but we can't notify
     fi
 
+    # Track a "pending" state to debounce flappy transitions.
+    # A transition is only confirmed (and notified) after 2 consecutive checks agree.
+    local pending_state=""
+
     while true; do
         local next_state
         if is_host_alive; then
@@ -36,21 +40,33 @@ monitor_host_liveness() {
         fi
 
         if [ "$current_state" != "$next_state" ]; then
-            echo "Liveness Monitor: State transition detected: $current_state -> $next_state"
-            
-            if [ -n "$notify_chat_id" ]; then
-                if [ "$next_state" = "online" ]; then
-                    # Host came back online
-                    send_message "$notify_chat_id" "$(expand_msg "${MSG_BOT_HOST_ONLINE:-Host is now ONLINE and reachable.}")" ""
-                else
-                    # Host went offline
-                    send_message "$notify_chat_id" "$(expand_msg "${MSG_BOT_HOST_OFFLINE:-Host is now OFFLINE or suspended.}")" ""
+            # State differs from confirmed state — start or continue debounce
+            if [ "$pending_state" = "$next_state" ]; then
+                # Second consecutive check confirms the transition — notify now
+                echo "Liveness Monitor: State transition confirmed: $current_state -> $next_state"
+                
+                if [ -n "$notify_chat_id" ]; then
+                    if [ "$next_state" = "online" ]; then
+                        send_message "$notify_chat_id" "$(expand_msg "${MSG_BOT_HOST_ONLINE:-Host is now ONLINE and reachable.}")" ""
+                    else
+                        send_message "$notify_chat_id" "$(expand_msg "${MSG_BOT_HOST_OFFLINE:-Host is now OFFLINE or suspended.}")" ""
+                    fi
                 fi
+                current_state="$next_state"
+                pending_state=""
+                # Full interval before next check after confirmed transition
+                sleep 60
+            else
+                # First check showing a different state — record it, wait a short
+                # interval and check again before committing
+                echo "Liveness Monitor: Possible state change detected ($current_state -> $next_state), debouncing..."
+                pending_state="$next_state"
+                sleep 15
             fi
-            current_state="$next_state"
+        else
+            # State matches confirmed state — clear any pending debounce
+            pending_state=""
+            sleep 60
         fi
-        
-        # Poll every 60 seconds to balance responsiveness and load
-        sleep 60
     done
 }

@@ -15,7 +15,7 @@ vmstart_command() {
     if ! cmd_check_maintenance_active "$chat_id" "$message_id" "$command_str"; then return; fi
 
     # Send starting notification in foreground to ensure it's delivered immediately
-    send_message "$chat_id" "$MSG_BOT_VM_START_STARTING" "" "$message_id"
+    export arg1="$vmid"; send_message "$chat_id" "$MSG_BOT_VM_START_SENDING" "" "$message_id"
 
     (
         # Re-establish scope for the subshell

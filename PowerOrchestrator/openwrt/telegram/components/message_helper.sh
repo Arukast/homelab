@@ -76,38 +76,71 @@ send_message() {
     local text
     text=$(expand_msg "$raw_text")
 
+    # Collapse markup JSON to a single line (heredocs in get_markup produce newlines
+    # that make the JSON invalid when URL-encoded and sent to Telegram)
+    local markup_inline
+    markup_inline=$(printf '%s' "$markup" | tr -d '\n')
+
     local method="sendMessage"
 
     if [ -n "$message_id" ]; then
         method="editMessageText"
-        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
-            --data-urlencode "chat_id=${chat_id}" \
-            --data-urlencode "message_id=${message_id}" \
-            --data-urlencode "text=${text}" \
-            --data-urlencode "parse_mode=Markdown" \
-            --data-urlencode "reply_markup=${markup}")
-
-        # If Markdown failed, retry without Markdown formatting
-        if ! echo "$resp" | grep -q '"ok":true'; then
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+        if [ -n "$markup_inline" ]; then
+            resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
                 --data-urlencode "chat_id=${chat_id}" \
                 --data-urlencode "message_id=${message_id}" \
                 --data-urlencode "text=${text}" \
-                --data-urlencode "reply_markup=${markup}" >/dev/null
+                --data-urlencode "parse_mode=Markdown" \
+                --data-urlencode "reply_markup=${markup_inline}")
+        else
+            resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "message_id=${message_id}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "parse_mode=Markdown")
         fi
-    else
-        resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
-            --data-urlencode "chat_id=${chat_id}" \
-            --data-urlencode "text=${text}" \
-            --data-urlencode "parse_mode=Markdown" \
-            --data-urlencode "reply_markup=${markup}")
 
         # If Markdown failed, retry without Markdown formatting
         if ! echo "$resp" | grep -q '"ok":true'; then
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+            if [ -n "$markup_inline" ]; then
+                curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                    --data-urlencode "chat_id=${chat_id}" \
+                    --data-urlencode "message_id=${message_id}" \
+                    --data-urlencode "text=${text}" \
+                    --data-urlencode "reply_markup=${markup_inline}" >/dev/null
+            else
+                curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                    --data-urlencode "chat_id=${chat_id}" \
+                    --data-urlencode "message_id=${message_id}" \
+                    --data-urlencode "text=${text}" >/dev/null
+            fi
+        fi
+    else
+        if [ -n "$markup_inline" ]; then
+            resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
                 --data-urlencode "chat_id=${chat_id}" \
                 --data-urlencode "text=${text}" \
-                --data-urlencode "reply_markup=${markup}" >/dev/null
+                --data-urlencode "parse_mode=Markdown" \
+                --data-urlencode "reply_markup=${markup_inline}")
+        else
+            resp=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                --data-urlencode "chat_id=${chat_id}" \
+                --data-urlencode "text=${text}" \
+                --data-urlencode "parse_mode=Markdown")
+        fi
+
+        # If Markdown failed, retry without Markdown formatting
+        if ! echo "$resp" | grep -q '"ok":true'; then
+            if [ -n "$markup_inline" ]; then
+                curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                    --data-urlencode "chat_id=${chat_id}" \
+                    --data-urlencode "text=${text}" \
+                    --data-urlencode "reply_markup=${markup_inline}" >/dev/null
+            else
+                curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/$method" \
+                    --data-urlencode "chat_id=${chat_id}" \
+                    --data-urlencode "text=${text}" >/dev/null
+            fi
         fi
     fi
 }
