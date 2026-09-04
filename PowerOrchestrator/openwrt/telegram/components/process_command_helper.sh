@@ -23,7 +23,7 @@ process_command() {
             status_command "$chat_id" "$msg_id"
             ;;
 
-        /wake)
+        /wake|/wake_proxmox)
             wake_command "$chat_id" "$msg_id"
             ;;
 
