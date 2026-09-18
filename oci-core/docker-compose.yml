@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   tailscale:
     image: tailscale/tailscale:latest
@@ -11,11 +13,15 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=false
       - TS_EXTRA_ARGS=--advertise-exit-node --accept-routes
-      # Paste your Tailscale auth key below to skip manual browser login:
-      # - TS_AUTHKEY=tskey-auth-k1234567890CNTRL-abcdef123456789
     volumes:
       - ./tailscale/state:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   nginx-proxy-manager:
@@ -29,6 +35,12 @@ services:
     volumes:
       - ./npm/data:/data
       - ./npm/letsencrypt:/etc/letsencrypt
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:81/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   uptime-kuma:
     image: louislam/uptime-kuma:1
@@ -38,6 +50,12 @@ services:
       - '3001:3001'
     volumes:
       - ./uptime-kuma/data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "node extra/healthcheck.js || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   adguard:
     image: adguard/adguardhome:latest
@@ -46,8 +64,14 @@ services:
     ports:
       - '53:53/tcp'
       - '53:53/udp'
-      - '3000:3000/tcp' # Initial Setup Admin UI
-      - '853:853/tcp'   # DNS-over-TLS
+      - '3000:3000/tcp'
+      - '853:853/tcp'
     volumes:
       - ./adguard/work:/opt/adguardhome/work
       - ./adguard/conf:/opt/adguardhome/conf
+    healthcheck:
+      test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "53"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
