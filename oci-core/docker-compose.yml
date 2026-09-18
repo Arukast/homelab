@@ -60,16 +60,12 @@ services:
     container_name: adguard
     restart: unless-stopped
     ports:
-      - '53:53/tcp'
-      - '53:53/udp'
-      - '3000:3000/tcp'
-      - '853:853/tcp'
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "784:784/udp"   # DNS-over-QUIC
+      - "853:853/tcp"   # DNS-over-TLS
+      - "853:853/udp"   # DNS-over-QUIC
+      - "3000:3000/tcp" # Initial Setup Wizard & Web Admin UI
     volumes:
       - ./adguard/work:/opt/adguardhome/work
       - ./adguard/conf:/opt/adguardhome/conf
-    healthcheck:
-      test: ["CMD", "nc", "-z", "-v", "127.0.0.1", "53"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
