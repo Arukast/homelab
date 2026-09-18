@@ -49,11 +49,11 @@ services:
     volumes:
       - ./uptime-kuma/data:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "node extra/healthcheck.js || exit 1"]
-      interval: 30s
-      timeout: 5s
+      test: ["CMD", "node", "extra/healthcheck.js"]
+      interval: 60s
+      timeout: 30s
       retries: 3
-      start_period: 10s
+      start_period: 60s
 
   adguard:
     image: adguard/adguardhome:latest
