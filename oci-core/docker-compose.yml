@@ -49,7 +49,7 @@ services:
     volumes:
       - ./uptime-kuma/data:/app/data
     healthcheck:
-      test: ["CMD", "node", "extra/healthcheck.js", "3001", "http", "dashboard"]
+      test: ["CMD", "node", "extra/healthcheck.js"]
       interval: 60s
       timeout: 30s
       retries: 3
