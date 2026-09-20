@@ -1,4 +1,16 @@
 services:
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_POLL_INTERVAL=86400 # Check every 24 hours
+      - TZ=UTC
+
   tailscale:
     image: tailscale/tailscale:latest
     container_name: tailscale
@@ -14,6 +26,7 @@ services:
     volumes:
       - ./tailscale/state:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
+      - /lib/modules:/lib/modules:ro
     healthcheck:
       test: ["CMD", "tailscale", "status"]
       interval: 30s
@@ -21,6 +34,8 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:latest
@@ -28,22 +43,28 @@ services:
     restart: unless-stopped
     ports:
       - '80:80'
-      - '81:81'
       - '443:443'
+      - '127.0.0.1:81:81' # Admin Web UI locked to local access / Tailscale
     volumes:
       - ./npm/data:/data
       - ./npm/letsencrypt:/etc/letsencrypt
+    networks:
+      - internal_net
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:81/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   uptime-kuma:
     image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     restart: unless-stopped
+    networks:
+      - internal_net
     volumes:
       - ./uptime-kuma/data:/app/data
     healthcheck:
@@ -52,6 +73,8 @@ services:
       timeout: 30s
       retries: 3
       start_period: 60s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   adguard:
     image: adguard/adguardhome:latest
@@ -60,13 +83,21 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "127.0.0.1:3000:3000/tcp"
+      - "127.0.0.1:3000:3000/tcp" # Web UI bound to localhost
     volumes:
       - ./adguard/work:/opt/adguardhome/work
       - ./adguard/conf:/opt/adguardhome/conf
+    networks:
+      - internal_net
     healthcheck:
-      test: ["CMD-SHELL", "docker-compose-healthcheck || wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  internal_net:
+    driver: bridge
