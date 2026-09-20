@@ -44,8 +44,6 @@ services:
     image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     restart: unless-stopped
-    ports:
-      - '3001:3001'
     volumes:
       - ./uptime-kuma/data:/app/data
     healthcheck:
@@ -62,10 +60,7 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "784:784/udp"   # DNS-over-QUIC
-      - "853:853/tcp"   # DNS-over-TLS
-      - "853:853/udp"   # DNS-over-QUIC
-      - "3000:3000/tcp" # Initial Setup Wizard & Web Admin UI
+      - "127.0.0.1:3000:3000/tcp"
     volumes:
       - ./adguard/work:/opt/adguardhome/work
       - ./adguard/conf:/opt/adguardhome/conf
