@@ -51,7 +51,7 @@ services:
     ports:
       - '80:80'
       - '443:443'
-      - '127.0.0.1:81:81' # Admin Web UI locked to local access / Tailscale
+      - '81:81' # Admin Web UI locked to local access / Tailscale
     volumes:
       - ./npm/data:/data
       - ./npm/letsencrypt:/etc/letsencrypt
