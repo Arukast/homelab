@@ -9,7 +9,14 @@ services:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_POLL_INTERVAL=86400 # Check every 24 hours
-      - TZ=UTC
+      - TZ=Asia/Jakarta
+      - DOCKER_API_VERSION=1.40 # Fixes Docker API mismatch
+    healthcheck:
+      test: ["CMD", "/watchtower", "--help"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   tailscale:
     image: tailscale/tailscale:latest
