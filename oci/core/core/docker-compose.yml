@@ -44,6 +44,18 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: core_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - npm
+
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:latest
     container_name: npm
