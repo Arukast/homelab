@@ -9,7 +9,7 @@ services:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_POLL_INTERVAL=86400 # Check every 24 hours
-      - TZ=Asia/Jakarta
+      - TZ=${TZ}
       - DOCKER_API_VERSION=1.40 # Fixes Docker API mismatch
     healthcheck:
       test: ["CMD", "/watchtower", "--help"]
@@ -90,6 +90,8 @@ services:
       - ./uptime-kuma/data:/app/data
     networks:
       - internal_net
+    extra_hosts:
+      - "host.tailscale:${TAILSCALE_IP}"
     security_opt:
       - no-new-privileges:true
     healthcheck:
