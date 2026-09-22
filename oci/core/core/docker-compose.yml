@@ -91,7 +91,7 @@ services:
     networks:
       - internal_net
     extra_hosts:
-      - "host.tailscale:${TAILSCALE_IP}"
+      - "host.docker.internal:host-gateway"
     security_opt:
       - no-new-privileges:true
     healthcheck:
