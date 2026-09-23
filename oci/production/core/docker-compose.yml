@@ -11,6 +11,8 @@ services:
       - WATCHTOWER_POLL_INTERVAL=86400 # Check every 24 hours
       - TZ=Asia/Jakarta
       - DOCKER_API_VERSION=1.40 # Fixes Docker API mismatch
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "/watchtower", "--help"]
       interval: 60s
@@ -34,6 +36,8 @@ services:
       - ./tailscale/state:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
       - /lib/modules:/lib/modules:ro
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "tailscale", "status"]
       interval: 30s
