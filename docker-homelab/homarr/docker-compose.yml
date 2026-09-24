@@ -1,7 +1,7 @@
 services:
   homarr:
     image: ghcr.io/homarr-labs/homarr:latest
-    container_name: homarr
+    container_name: ${HOMARR_CONTAINER_NAME}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -14,6 +14,8 @@ services:
       - SECRET_ENCRYPTION_KEY=${HOMARR_SECRET_ENCRYPTION_KEY}
     volumes:
       - ./homarr/appdata:/appdata
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 7575 || exit 1"]
       interval: 30s
