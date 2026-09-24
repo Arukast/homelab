@@ -31,7 +31,7 @@ services:
 
   homarr:
     image: ghcr.io/homarr-labs/homarr:latest
-    container_name: homarr-family
+    container_name: homarr
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
