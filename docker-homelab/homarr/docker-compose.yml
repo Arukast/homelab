@@ -7,7 +7,6 @@ services:
       - no-new-privileges:true
     networks:
       - dashboard-net
-      - socket-proxy-net
     ports:
       - "${HOST_IP:-127.0.0.1}:7575:7575"
     environment:
@@ -26,5 +25,3 @@ services:
 networks:
   dashboard-net:
     driver: bridge
-  socket-proxy-net:
-    external: true
