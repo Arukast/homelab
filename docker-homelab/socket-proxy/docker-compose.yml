@@ -1,14 +1,17 @@
 services:
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest
-    container_name: docker-socket-proxy
+    container_name: ${DOCKER_SOCKET_PROXY_CONTAINER_NAME}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - socket-proxy-net
     ports:
-      # Bind strictly to the node's local IP or Tailscale IP:
       - "${HOST_IP:-127.0.0.1}:2375:2375"
     environment:
       - INFO=${INFO:-1}
@@ -25,8 +28,6 @@ services:
       - EXEC=${EXEC:-0}
       - VOLUMES=${VOLUMES:-0}
       - SYSTEM=${SYSTEM:-0}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:2375/_ping || exit 1"]
       interval: 10s
