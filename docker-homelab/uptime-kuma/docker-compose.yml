@@ -8,7 +8,6 @@ services:
     volumes:
       - ./uptime-kuma/data:/app/data
       - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
     networks:
       - npm-net
     extra_hosts:
